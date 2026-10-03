@@ -5,7 +5,15 @@ import { ExpenseDocumentBase } from '../models/expense-document.base.js';
 import { ExpenseItem } from '../models/expense-item.model.js';
 import { PaymentOut } from '../models/payment-out.model.js';
 
-import type { ExpenseDocumentRemote, ExpenseItemRemote, ExpenseReference } from '../types/expenses.types.js';
+import type {
+    ExpenseDocumentRemote,
+    ExpenseItemRemote,
+    ExpenseReference,
+    LossPositionRemote,
+    LossRemote,
+} from '../types/expenses.types.js';
+import { ExpenseLossPosition } from '../models/loss-position.model.js';
+import { ExpenseLoss } from '../models/loss.model.js';
 
 export class ExpensesMapper {
     public static toExpenseItem(source: ExpenseItemRemote, syncedAt: Date): ExpenseItem {
@@ -89,5 +97,117 @@ export class ExpensesMapper {
         }
 
         return date;
+    }
+
+    public static toLoss(
+        source: LossRemote,
+        syncedAt: Date,
+    ): ExpenseLoss {
+        return {
+            id: source.id,
+            name: source.name,
+
+            externalCode:
+                source.externalCode ?? null,
+
+            description:
+                source.description ?? null,
+
+            moment:
+                this.parseDate(source.moment),
+
+            createdAtSource:
+                source.created
+                    ? this.parseDate(source.created)
+                    : null,
+
+            sourceUpdatedAt:
+                this.parseDate(source.updated),
+
+            isPosted:
+            source.applicable,
+
+            sumMinor:
+                String(source.sum ?? 0),
+
+            organizationId:
+                this.referenceId(
+                    source.organization,
+                ),
+
+            storeId:
+                this.referenceId(
+                    source.store,
+                ),
+
+            ownerId:
+                this.referenceId(
+                    source.owner,
+                ),
+
+            groupId:
+                this.referenceId(
+                    source.group,
+                ),
+
+            projectId:
+                this.referenceId(
+                    source.project,
+                ),
+
+            currencyId:
+                this.referenceId(
+                    source.rate?.currency,
+                ),
+
+            exchangeRate:
+                source.rate?.value === undefined
+                    ? null
+                    : String(source.rate.value),
+
+            syncedAt,
+        };
+    }
+
+    public static toLossPosition(
+        source: LossPositionRemote,
+        lossId: string,
+    ): ExpenseLossPosition {
+        const quantity =
+            source.quantity ?? 0;
+
+        const price =
+            source.price ?? 0;
+
+        return {
+            lossId,
+            id: source.id,
+
+            assortmentId:
+                this.referenceId(
+                    source.assortment,
+                ),
+
+            assortmentType:
+                source.assortment.meta.type ??
+                null,
+
+            quantity:
+                String(quantity),
+
+            priceMinor:
+                String(price),
+
+            totalMinor:
+                String(quantity * price),
+
+            vat:
+                source.vat === undefined
+                    ? null
+                    : String(source.vat),
+
+            vatEnabled:
+                source.vatEnabled ?? null,
+        };
     }
 }

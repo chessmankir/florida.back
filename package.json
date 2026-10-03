@@ -21,7 +21,8 @@
         "test:debug": "vitest --inspect-brk --no-file-parallelism",
         "test:e2e": "vitest run --config ./vitest.config.e2e.ts",
         "sync:moysklad:sales": "npm run build && node dist/modules/synchronization/sync.js sales",
-        "sync:moysklad": "npm run build && node dist/modules/synchronization/sync.js all"
+        "sync:moysklad": "npm run build && node dist/modules/synchronization/sync.js all",
+        "sync:flowwow": "npm run build && node dist/modules/synchronization/sync.js flowwow_orders"
     },
     "dependencies": {
         "@nestjs/common": "^12.0.1",
@@ -32,6 +33,7 @@
         "@nestjs/typeorm": "^12.0.1",
         "axios": "^1.20.0",
         "cron": "^4.4.0",
+        "exceljs": "^4.4.0",
         "joi": "^18.2.9",
         "pg": "^8.23.0",
         "reflect-metadata": "^0.2.2",

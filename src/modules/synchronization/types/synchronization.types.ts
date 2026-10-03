@@ -1,4 +1,4 @@
-export type SyncScope = 'all' | 'sales' | 'products' | 'expenses';
+export type SyncScope = 'all' | 'sales' | 'products' | 'expenses' | 'flowwow_orders';
 
 export interface SyncResult {
     scope: SyncScope;

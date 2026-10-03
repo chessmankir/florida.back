@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
 
+import { ExpensesModule } from '../expenses/expenses.module.js';
+import { FlowwowModule } from '../flowwow/flowwow.module.js';
 import { ProductsModule } from '../products/products.module.js';
 import { SalesModule } from '../sales/sales.module.js';
 import { SynchronizationController } from './synchronization.controller.js';
@@ -8,7 +10,7 @@ import { SynchronizationScheduler } from './synchronization.scheduler.js';
 import { SynchronizationService } from './synchronization.service.js';
 
 @Module({
-    imports: [SalesModule, ProductsModule],
+    imports: [SalesModule, ProductsModule, ExpensesModule, FlowwowModule],
     controllers: [SynchronizationController],
     providers: [SynchronizationRepository, SynchronizationService, SynchronizationScheduler],
     exports: [SynchronizationService],

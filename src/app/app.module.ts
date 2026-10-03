@@ -24,6 +24,10 @@ import { ScheduleModule } from '@nestjs/schedule';
                 MOYSKLAD_SYNC_CRON: Joi.string().default('0 0 3 * * *'),
                 MOYSKLAD_SYNC_TIMEZONE: Joi.string().default('Europe/Moscow'),
                 MOYSKLAD_SYNC_PAGE_SIZE: Joi.number().integer().min(1).max(100).default(100),
+                FLOWWOW_TOKEN: Joi.string().allow('').default(''),
+                FLOWWOW_SYNC_PAGE_SIZE: Joi.number().integer().min(1).max(100).default(100),
+                FLOWWOW_SYNC_LOOKBACK_DAYS: Joi.number().integer().min(1).default(90),
+                FLOWWOW_SYNC_FUTURE_DAYS: Joi.number().integer().min(1).default(365),
             }),
         }),
 

@@ -5,7 +5,14 @@ import axios, { type AxiosInstance } from 'axios';
 
 import { setTimeout as sleep } from 'node:timers/promises';
 
-import type { ExpenseDocumentRemote, ExpenseItemRemote, ExpensePageRequest, ExpenseRemotePage } from '../types/expenses.types.js';
+import type {
+    ExpenseDocumentRemote,
+    ExpenseItemRemote,
+    ExpensePageRequest,
+    ExpenseRemotePage,
+    LossPositionRemote,
+    LossRemote,
+} from '../types/expenses.types.js';
 
 @Injectable()
 export class ExpensesClient {
@@ -41,25 +48,52 @@ export class ExpensesClient {
         return this.getPage('/entity/cashout', request);
     }
 
-    private async getPage<T>(path: string, request: ExpensePageRequest): Promise<ExpenseRemotePage<T>> {
-        const limit = Math.min(Math.max(request.limit ?? 1000, 1), 1000);
+    private async getPage<T>(
+        path: string,
+        request: ExpensePageRequest,
+        maximum = 1000,
+        additionalParams: Record<
+            string,
+            string
+        > = {},
+    ): Promise<ExpenseRemotePage<T>> {
+        const limit = Math.min(
+            Math.max(
+                request.limit ?? maximum,
+                1,
+            ),
+            maximum,
+        );
 
         const offset = request.offset ?? 0;
 
-        if (!Number.isInteger(offset) || offset < 0) {
-            throw new Error('Некорректный offset пагинации');
+        if (
+            !Number.isInteger(offset) ||
+            offset < 0
+        ) {
+            throw new Error(
+                'Некорректный offset пагинации',
+            );
         }
 
         for (let attempt = 0; ; attempt++) {
             try {
-                const response = await this.http.get<ExpenseRemotePage<T>>(path, {
-                    params: {
-                        limit,
-                        offset,
-                    },
-                });
+                const response =
+                    await this.http.get<
+                        ExpenseRemotePage<T>
+                    >(path, {
+                        params: {
+                            limit,
+                            offset,
+                            ...additionalParams,
+                        },
+                    });
 
-                this.validatePage(response.data, limit, offset);
+                this.validatePage(
+                    response.data,
+                    limit,
+                    offset,
+                );
 
                 return response.data;
             } catch (error: unknown) {
@@ -67,39 +101,63 @@ export class ExpensesClient {
                     throw error;
                 }
 
-                const status = error.response?.status;
+                const status =
+                    error.response?.status;
 
-                const retryable = !status || status === 429 || status >= 500;
+                const retryable =
+                    !status ||
+                    status === 429 ||
+                    status >= 500;
 
                 if (!retryable || attempt >= 4) {
-                    const responseData = error.response?.data as
-                        | {
-                              errors?: Array<{
-                                  error?: string;
-                                  code?: number;
-                                  parameter?: string;
-                              }>;
-                          }
-                        | undefined;
+                    const responseData =
+                        error.response?.data as
+                            | {
+                            errors?: Array<{
+                                error?: string;
+                                code?: number;
+                                parameter?: string;
+                            }>;
+                        }
+                            | undefined;
 
-                    const apiErrors = responseData?.errors?.map((item) => ({
-                        message: item.error,
-                        code: item.code,
-                        parameter: item.parameter,
-                    }));
+                    const apiErrors =
+                        responseData?.errors?.map(
+                            (item) => ({
+                                message: item.error,
+                                code: item.code,
+                                parameter:
+                                item.parameter,
+                            }),
+                        );
 
                     this.logger.error({
-                        event: 'expenses_request_failed',
+                        event:
+                            'expenses_request_failed',
                         path,
                         status,
                         code: error.code,
                         apiErrors,
                     });
 
-                    throw new BadGatewayException(`МойСклад: ошибка чтения ${path}` + (status ? ` (HTTP ${status})` : ' (сеть)'));
+                    throw new BadGatewayException(
+                        `МойСклад: ошибка чтения ${path}` +
+                        (
+                            status
+                                ? ` (HTTP ${status})`
+                                : ' (сеть)'
+                        ),
+                    );
                 }
 
-                await sleep(this.retryDelay(error.response?.headers['retry-after'], attempt));
+                await sleep(
+                    this.retryDelay(
+                        error.response?.headers[
+                            'retry-after'
+                            ],
+                        attempt,
+                    ),
+                );
             }
         }
     }
@@ -126,5 +184,36 @@ export class ExpensesClient {
         const delay = Number.isFinite(seconds) ? seconds * 1000 : Number.isFinite(dateDelay) ? dateDelay : 1000 * 2 ** attempt;
 
         return Math.max(1000, Math.min(delay, 60_000));
+    }
+
+    public getLosses(
+        request: ExpensePageRequest = {},
+    ): Promise<ExpenseRemotePage<LossRemote>> {
+        /*
+         * При expand=positions используем limit 100.
+         */
+        return this.getPage(
+            '/entity/loss',
+            request,
+            100,
+            {
+                expand: 'positions',
+            },
+        );
+    }
+
+    public getLossPositions(
+        lossId: string,
+        request: ExpensePageRequest = {},
+    ): Promise<
+        ExpenseRemotePage<LossPositionRemote>
+    > {
+        return this.getPage(
+            `/entity/loss/${encodeURIComponent(
+                lossId,
+            )}/positions`,
+            request,
+            1000,
+        );
     }
 }

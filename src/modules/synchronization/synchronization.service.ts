@@ -1,10 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
-
-import { ProductsService } from '../products/products.service.js';
-import { SalesService } from '../sales/sales.service.js';
 import { SynchronizationRepository } from './synchronization.repository.js';
-import type { SyncResult, SyncScope } from './types/synchronization.types.js';
+import { SalesService } from '../sales/sales.service.js';
+import { ProductsService } from '../products/products.service.js';
 import { ExpensesService } from '../expenses/expenses.service.js';
+import { FlowwowOrdersService } from '../flowwow/flowwow_orders/flowwow-orders.service.js';
+import { SyncResult, SyncScope } from './types/synchronization.types.js';
+
 
 @Injectable()
 export class SynchronizationService {
@@ -16,7 +17,8 @@ export class SynchronizationService {
         private readonly repository: SynchronizationRepository,
         private readonly sales: SalesService,
         private readonly products: ProductsService,
-        private readonly expenses: ExpensesService
+        private readonly expenses: ExpensesService,
+        private readonly flowwowOrders: FlowwowOrdersService
     ) {}
 
     public async run(scope: SyncScope = 'all'): Promise<SyncResult | null> {
@@ -38,16 +40,19 @@ export class SynchronizationService {
         const counts: Record<string, number> = {};
         const errors: string[] = [];
 
-        /* if (scope === 'all' || scope === 'sales') {
+         /*if (scope === 'all' || scope === 'sales') {
             await this.synchronizeSales(counts, errors);
-        }*/
-
-        if (scope === 'all' || scope === 'products') {
-            await this.synchronizeProducts(counts, errors);
         }
 
+           if (scope === 'all' || scope === 'products') {
+            await this.synchronizeProducts(counts, errors);
+        }
         if (scope === 'all' || scope === 'expenses') {
             await this.synchronizeExpenses(counts, errors);
+        }
+*/
+        if (scope === 'all' || scope === 'flowwow_orders') {
+            await this.synchronizeFlowwowOrders(counts, errors);
         }
 
         return {
@@ -59,50 +64,66 @@ export class SynchronizationService {
         };
     }
 
-    private async synchronizeExpenses(
-        counts: Record<string, number>,
-        errors: string[],
-    ): Promise<void> {
+    private async synchronizeFlowwowOrders(counts: Record<string, number>, errors: string[]): Promise<void> {
+        try {
+            const result = await this.flowwowOrders.syncAll();
+            counts.flowwow_shops = result.shopsSynced;
+            counts.flowwow_orders = result.total;
+            this.logger.log({
+                event: 'flowwow_orders_synchronization_finished',
+                shopsSynced: result.shopsSynced,
+                shops: result.shops,
+                total: result.total,
+            });
+        } catch (error: unknown) {
+            const cause = error instanceof Error ? error.message : String(error);
+            const message = 'Синхронизация заказов Flowwow не завершена.';
+            errors.push(`flowwow_orders: ${message} ${cause}`);
+            this.logger.error({
+                event: 'flowwow_orders_synchronization_failed',
+                message,
+                cause,
+                stack: error instanceof Error ? error.stack : undefined,
+            });
+        }
+    }
+
+    private async synchronizeExpenses(counts: Record<string, number>, errors: string[]): Promise<void> {
         try {
             /*
              * Внутри syncAll последовательность:
              * expenseitem → paymentout → cashout.
              */
-            const result =
-                await this.expenses.syncAll();
+            const result = await this.expenses.syncAll();
 
-            counts.expenseitem =
-                result.expenseItems;
+            counts.expenseitem = result.expenseItems;
 
-            counts.paymentout =
-                result.paymentOuts;
+            counts.paymentout = result.paymentOuts;
 
-            counts.cashout =
-                result.cashOuts;
+            counts.cashout = result.cashOuts;
+
+            counts.loss = result.losses;
 
             this.logger.log({
-                event:
-                    'expenses_synchronization_finished',
-                expenseItems:
-                result.expenseItems,
-                paymentOuts:
-                result.paymentOuts,
-                cashOuts:
-                result.cashOuts,
-                total:
-                result.total,
+                event: 'expenses_synchronization_finished',
+
+                expenseItems: result.expenseItems,
+
+                paymentOuts: result.paymentOuts,
+
+                cashOuts: result.cashOuts,
+
+                losses: result.losses,
+
+                total: result.total,
             });
         } catch {
-            const message =
-                'Синхронизация расходов не завершена; ' +
-                'сохранённые чанки будут обновлены ' +
-                'при повторном запуске.';
+            const message = 'Синхронизация расходов не завершена; ' + 'сохранённые чанки будут обновлены ' + 'при повторном запуске.';
 
             errors.push(`expenses: ${message}`);
 
             this.logger.error({
-                event:
-                    'expenses_synchronization_failed',
+                event: 'expenses_synchronization_failed',
                 message,
             });
         }
