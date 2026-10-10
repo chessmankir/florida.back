@@ -32,17 +32,17 @@ export class FlowwowOrdersRepository {
                     .orUpdate(
                         [
                             'status',
-                            'deliveryType',
-                            'deliveryTimeType',
-                            'createdAtSource',
-                            'deliveryDateFrom',
-                            'deliveryDateTo',
-                            'grossProductAmount',
-                            'sourceHost',
-                            'rawJson',
-                            'syncedAt',
+                            'delivery_type',
+                            'delivery_time_type',
+                            'created_at_source',
+                            'delivery_date_from',
+                            'delivery_date_to',
+                            'gross_product_amount',
+                            'source_host',
+                            'raw_json',
+                            'synced_at',
                         ],
-                        ['shopId', 'orderId']
+                        ['shop_id', 'order_id']
                     )
                     .execute();
             }
@@ -110,17 +110,41 @@ export class FlowwowOrdersRepository {
             AND ($3::integer IS NULL OR o.shop_id = $3)
         `;
 
-        const countRows = await this.database.query<Array<{ total: string }>>(
-            `SELECT COUNT(*)::text AS total FROM flowwow_orders o WHERE ${where}`,
+        const summaryRows = await this.database.query<Array<{
+            total: string;
+            turnover: string;
+            averageCheck: string;
+            commissionExpenses: string;
+        }>>(
+            `
+                SELECT
+                    COUNT(*)::text AS total,
+                    COALESCE(SUM(o.gross_product_amount), 0)::text AS turnover,
+                    COALESCE(AVG(o.gross_product_amount), 0)::text AS "averageCheck",
+                    COALESCE(SUM(ABS(
+                        COALESCE(o.fixed_commission_amount, 0)
+                        + COALESCE(o.variable_commission_amount, 0)
+                    )), 0)::text AS "commissionExpenses"
+                FROM flowwow_orders o
+                WHERE ${where}
+            `,
             parameters
         );
-        const total = Number(countRows[0]?.total ?? 0);
+        const summary = summaryRows[0] ?? {
+            total: '0',
+            turnover: '0',
+            averageCheck: '0',
+            commissionExpenses: '0',
+        };
+        const total = Number(summary.total);
         const offset = (options.page - 1) * options.limit;
 
         const items = await this.database.query<FlowwowOrderListItem[]>(
             `
                 SELECT
                     o.shop_id AS "shopId",
+                    s.name AS "shopName",
+                    s.address AS "shopAddress",
                     o.order_id AS "orderId",
                     o.status,
                     o.created_at_source AS "createdAt",
@@ -152,10 +176,11 @@ export class FlowwowOrdersRepository {
                         '[]'::json
                     ) AS positions
                 FROM flowwow_orders o
+                LEFT JOIN flowwow_shops s ON s.shop_id = o.shop_id
                 LEFT JOIN flowwow_order_positions p
                     ON p.shop_id = o.shop_id AND p.order_id = o.order_id
                 WHERE ${where}
-                GROUP BY o.shop_id, o.order_id
+                GROUP BY o.shop_id, o.order_id, s.name, s.address
                 ORDER BY o.created_at_source DESC, o.order_id DESC
                 LIMIT $4 OFFSET $5
             `,
@@ -165,6 +190,13 @@ export class FlowwowOrdersRepository {
         return {
             period: { dateFrom: options.dateFrom, dateTo: options.dateTo },
             filters: { shopId: options.shopId },
+            shops: [],
+            summary: {
+                ordersCount: total,
+                turnover: summary.turnover,
+                averageCheck: summary.averageCheck,
+                commissionExpenses: summary.commissionExpenses,
+            },
             items,
             pagination: {
                 page: options.page,

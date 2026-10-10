@@ -4,6 +4,8 @@ import { SalesService } from '../sales/sales.service.js';
 import { ProductsService } from '../products/products.service.js';
 import { ExpensesService } from '../expenses/expenses.service.js';
 import { FlowwowOrdersService } from '../flowwow/flowwow_orders/flowwow-orders.service.js';
+import { FlowwowProductsService } from '../flowwow/flowwow_products/flowwow-products.service.js';
+import { MoyskladInventoryService } from '../moysklad_inventory/moysklad-inventory.service.js';
 import { SyncResult, SyncScope } from './types/synchronization.types.js';
 
 
@@ -18,7 +20,9 @@ export class SynchronizationService {
         private readonly sales: SalesService,
         private readonly products: ProductsService,
         private readonly expenses: ExpensesService,
-        private readonly flowwowOrders: FlowwowOrdersService
+        private readonly flowwowOrders: FlowwowOrdersService,
+        private readonly flowwowProducts: FlowwowProductsService,
+        private readonly moyskladInventory: MoyskladInventoryService
     ) {}
 
     public async run(scope: SyncScope = 'all'): Promise<SyncResult | null> {
@@ -51,8 +55,16 @@ export class SynchronizationService {
             await this.synchronizeExpenses(counts, errors);
         }
 */
-        if (scope === 'all' || scope === 'flowwow_orders') {
+       /* if (scope === 'all' || scope === 'flowwow_orders') {
             await this.synchronizeFlowwowOrders(counts, errors);
+        }*/
+
+       /* if (scope === 'all' || scope === 'flowwow_products') {
+            await this.synchronizeFlowwowProducts(counts, errors);
+        }*/
+
+        if (scope === 'all' || scope === 'moysklad_inventory') {
+            await this.synchronizeMoyskladInventory(counts, errors);
         }
 
         return {
@@ -62,6 +74,40 @@ export class SynchronizationService {
             counts,
             errors,
         };
+    }
+
+    private async synchronizeMoyskladInventory(counts: Record<string, number>, errors: string[]): Promise<void> {
+        try {
+            const result = await this.moyskladInventory.syncAll();
+            counts.moysklad_inventory = result.saved;
+            this.logger.log({ event: 'moysklad_inventory_synchronization_finished', ...result });
+        } catch (error: unknown) {
+            const cause = error instanceof Error ? error.message : String(error);
+            errors.push(`moysklad_inventory: Синхронизация каталога и остатков не завершена. ${cause}`);
+            this.logger.error({ event: 'moysklad_inventory_synchronization_failed', cause });
+        }
+    }
+
+    private async synchronizeFlowwowProducts(counts: Record<string, number>, errors: string[]): Promise<void> {
+        try {
+            const result = await this.flowwowProducts.syncAll();
+            counts.flowwow_products = result.total;
+            this.logger.log({
+                event: 'flowwow_products_synchronization_finished',
+                shops: result.shops,
+                total: result.total,
+            });
+        } catch (error: unknown) {
+            const cause = error instanceof Error ? error.message : String(error);
+            const message = 'Синхронизация товаров Flowwow не завершена.';
+            errors.push(`flowwow_products: ${message} ${cause}`);
+            this.logger.error({
+                event: 'flowwow_products_synchronization_failed',
+                message,
+                cause,
+                stack: error instanceof Error ? error.stack : undefined,
+            });
+        }
     }
 
     private async synchronizeFlowwowOrders(counts: Record<string, number>, errors: string[]): Promise<void> {

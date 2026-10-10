@@ -4,6 +4,7 @@ import { FlowwowAxiosService } from './flowwow-axios.service.js';
 import type {
     FlowwowOrdersPage,
     FlowwowOrdersRequest,
+    FlowwowRemoteOrder,
     FlowwowShopsPage,
     FlowwowShopsRequest,
 } from '../types/flowwow-orders.types.js';
@@ -32,6 +33,22 @@ export class FlowwowOrdersClient {
         });
         this.validateOrdersPage(response.data, page, limit);
         return response.data;
+    }
+
+    public async getOrder(shopId: number, orderId: number): Promise<FlowwowRemoteOrder> {
+        const response = await this.http.get<FlowwowRemoteOrder>('/apiseller/orders/view', {
+            params: { shopId, orderId },
+        });
+        const order = response.data;
+        if (
+            !order ||
+            order.id !== orderId ||
+            order.shopId !== shopId ||
+            !Array.isArray(order.products)
+        ) {
+            throw new BadGatewayException('Flowwow вернул некорректный заказ');
+        }
+        return order;
     }
 
     private validateOrdersPage(page: FlowwowOrdersPage, requestedPage: number, limit: number): void {

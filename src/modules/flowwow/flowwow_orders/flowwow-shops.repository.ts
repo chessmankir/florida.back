@@ -24,4 +24,12 @@ export class FlowwowShopsRepository {
         });
         return shops.map((shop) => shop.shopId);
     }
+
+    public async findActiveShops(): Promise<Array<{ shopId: number; name: string; address: string | null }>> {
+        return this.shops.find({
+            select: { shopId: true, name: true, address: true },
+            where: { status: 'active' },
+            order: { shopId: 'ASC' },
+        });
+    }
 }

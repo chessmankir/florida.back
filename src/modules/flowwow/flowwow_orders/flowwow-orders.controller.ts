@@ -21,9 +21,10 @@ export class FlowwowOrdersController {
     @Post('import')
     @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 10 * 1024 * 1024, files: 1 } }))
     public importFinance(
-        @UploadedFile() file?: UploadedFlowwowFinanceFile
+        @UploadedFile() file?: UploadedFlowwowFinanceFile,
+        @Query('shopId') shopId?: string
     ): Promise<FlowwowOrdersFinanceImportResult> {
-        return this.financeImport.import(file);
+        return this.financeImport.import(file, shopId);
     }
 
     @Get()

@@ -72,7 +72,7 @@ export class FlowwowOrdersService {
         };
     }
 
-    public getOrders(query: {
+    public async getOrders(query: {
         dateFrom?: string;
         dateTo?: string;
         shopId?: string;
@@ -95,7 +95,11 @@ export class FlowwowOrdersService {
             ? null
             : this.parsePositiveInteger(query.shopId, 0, 'shopId');
 
-        return this.repository.findOrders({ dateFrom, dateTo, shopId, page, limit });
+        const [result, shops] = await Promise.all([
+            this.repository.findOrders({ dateFrom, dateTo, shopId, page, limit }),
+            this.shopsService.findActiveShops(),
+        ]);
+        return { ...result, shops };
     }
 
     private async fetchAllShopOrders(shopId: number): Promise<FlowwowRemoteOrder[]> {

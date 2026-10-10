@@ -39,4 +39,8 @@ export class FlowwowShopsService {
 
         return { saved, activeShopIds: await this.repository.findActiveShopIds() };
     }
+
+    public findActiveShops(): Promise<Array<{ shopId: number; name: string; address: string | null }>> {
+        return this.repository.findActiveShops();
+    }
 }

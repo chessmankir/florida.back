@@ -29,6 +29,12 @@ import { FlowwowShopsService } from './flowwow-shops.service.js';
         FlowwowShopsService,
         FlowwowOrdersService,
     ],
-    exports: [FlowwowOrdersRepository, FlowwowShopsRepository, FlowwowOrdersService, FlowwowShopsService],
+    exports: [
+        FlowwowAxiosService,
+        FlowwowOrdersRepository,
+        FlowwowShopsRepository,
+        FlowwowOrdersService,
+        FlowwowShopsService,
+    ],
 })
 export class FlowwowOrdersModule {}

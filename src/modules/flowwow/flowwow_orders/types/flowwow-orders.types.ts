@@ -125,6 +125,8 @@ export interface FlowwowOrderListPosition {
 
 export interface FlowwowOrderListItem {
     shopId: number;
+    shopName: string | null;
+    shopAddress: string | null;
     orderId: number;
     status: number;
     createdAt: Date;
@@ -153,6 +155,7 @@ export interface FlowwowOrdersFinanceImportResult {
     recognizedRows: number;
     ignoredRows: number;
     ordersInFile: number;
+    createdOrders: number;
     updatedOrders: number;
     missingOrderIds: number[];
 }
@@ -160,6 +163,13 @@ export interface FlowwowOrdersFinanceImportResult {
 export interface FlowwowOrdersListResponse {
     period: { dateFrom: string; dateTo: string };
     filters: { shopId: number | null };
+    shops: Array<{ shopId: number; name: string; address: string | null }>;
+    summary: {
+        ordersCount: number;
+        turnover: string;
+        averageCheck: string;
+        commissionExpenses: string;
+    };
     items: FlowwowOrderListItem[];
     pagination: {
         page: number;

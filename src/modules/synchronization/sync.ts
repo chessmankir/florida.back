@@ -3,7 +3,7 @@ import { NestFactory } from '@nestjs/core';
 import { SynchronizationService } from './synchronization.service.js';
 import type { SyncScope } from './types/synchronization.types.js';
 
-const allowedScopes: SyncScope[] = ['all', 'sales', 'products', 'expenses', 'flowwow_orders'];
+const allowedScopes: SyncScope[] = ['all', 'sales', 'products', 'expenses', 'flowwow_orders', 'flowwow_products', 'moysklad_inventory'];
 
 const requestedScope = process.argv[2] ?? 'all';
 

@@ -22,7 +22,8 @@
         "test:e2e": "vitest run --config ./vitest.config.e2e.ts",
         "sync:moysklad:sales": "npm run build && node dist/modules/synchronization/sync.js sales",
         "sync:moysklad": "npm run build && node dist/modules/synchronization/sync.js all",
-        "sync:flowwow": "npm run build && node dist/modules/synchronization/sync.js flowwow_orders"
+        "sync:flowwow": "npm run build && node dist/modules/synchronization/sync.js flowwow_orders",
+        "sync:flowwow:products": "npm run build && node dist/modules/synchronization/sync.js flowwow_products"
     },
     "dependencies": {
         "@nestjs/common": "^12.0.1",
