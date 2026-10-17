@@ -1,9 +1,15 @@
-import { BadGatewayException, BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { BadGatewayException, BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { MoyskladInventoryClient } from './clients/moysklad-inventory.client.js';
 import { MoyskladInventoryMapper } from './mappers/moysklad-inventory.mapper.js';
 import { MoyskladInventoryRepository } from './moysklad-inventory.repository.js';
-import type { MoyskladInventoryListResponse, MoyskladInventorySnapshot, MoyskladInventorySyncResult } from './types/moysklad-inventory.types.js';
+import type {
+    MoyskladBundleComponentsResponse,
+    MoyskladBundleComponentSnapshot,
+    MoyskladInventoryListResponse,
+    MoyskladInventorySnapshot,
+    MoyskladInventorySyncResult,
+} from './types/moysklad-inventory.types.js';
 
 @Injectable()
 export class MoyskladInventoryService {
@@ -32,6 +38,33 @@ export class MoyskladInventoryService {
             if (page.rows.length === 0) throw new BadGatewayException('МойСклад вернул пустую страницу ассортимента');
         }
 
+        const bundleIds = [...products.values()]
+            .filter((product) => product.productType === 'bundle')
+            .map((product) => product.id);
+        const components: MoyskladBundleComponentSnapshot[] = [];
+        for (const bundleId of bundleIds) {
+            let receivedForBundle = 0;
+            for (let offset = 0; ; offset += this.pageSize) {
+                const page = await this.client.getBundleComponentsPage(bundleId, this.pageSize, offset);
+                for (const component of page.rows) {
+                    components.push({
+                        bundleId,
+                        componentId: component.id,
+                        assortmentId: this.idFromHref(component.assortment.meta.href),
+                        assortmentType: component.assortment.meta.type,
+                        quantity: String(component.quantity),
+                        syncedAt,
+                    });
+                }
+                receivedForBundle += page.rows.length;
+                if (receivedForBundle >= page.meta.size) break;
+                if (page.rows.length === 0) {
+                    throw new BadGatewayException(`МойСклад вернул пустую страницу компонентов комплекта ${bundleId}`);
+                }
+            }
+            await this.sleep(75);
+        }
+
         let stockRowsReceived = 0;
         for (let offset = 0; ; offset += this.pageSize) {
             const page = await this.client.getStockPage(this.pageSize, offset);
@@ -45,8 +78,23 @@ export class MoyskladInventoryService {
             if (page.rows.length === 0) throw new BadGatewayException('МойСклад вернул пустую страницу остатков');
         }
         const saved = await this.repository.saveAll([...products.values()]);
-        this.logger.log({ event: 'moysklad_inventory_synchronization_finished', assortmentReceived, stockRowsReceived, saved });
-        return { assortmentReceived, stockRowsReceived, saved };
+        const componentsReceived = await this.repository.replaceBundleComponents(bundleIds, components);
+        this.logger.log({
+            event: 'moysklad_inventory_synchronization_finished',
+            assortmentReceived,
+            stockRowsReceived,
+            bundlesReceived: bundleIds.length,
+            componentsReceived,
+            saved,
+        });
+        return { assortmentReceived, stockRowsReceived, bundlesReceived: bundleIds.length, componentsReceived, saved };
+    }
+
+    public async getBundleComponents(bundleIdValue: string): Promise<MoyskladBundleComponentsResponse> {
+        const bundleId = this.uuid(bundleIdValue, 'bundleId');
+        const result = await this.repository.findBundleComponents(bundleId);
+        if (!result) throw new NotFoundException('Комплект МойСклад не найден');
+        return result;
     }
 
     public getProducts(query: Record<string, string | undefined>): Promise<MoyskladInventoryListResponse> {
@@ -77,5 +125,22 @@ export class MoyskladInventoryService {
         if (value === 'true') return true;
         if (value === 'false') return false;
         throw new BadRequestException(`${field} должен быть true или false`);
+    }
+
+    private uuid(value: string, field: string): string {
+        if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)) {
+            throw new BadRequestException(`${field} должен быть корректным UUID`);
+        }
+        return value;
+    }
+
+    private idFromHref(href: string): string {
+        const id = href.split('/').filter(Boolean).at(-1)?.split('?')[0];
+        if (!id) throw new BadGatewayException(`МойСклад вернул ссылку без ID: ${href}`);
+        return id;
+    }
+
+    private sleep(ms: number): Promise<void> {
+        return new Promise((resolve) => setTimeout(resolve, ms));
     }
 }

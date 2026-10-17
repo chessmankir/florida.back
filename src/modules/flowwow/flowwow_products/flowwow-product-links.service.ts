@@ -19,7 +19,7 @@ export class FlowwowProductLinksService {
         const shopId = this.positiveInteger(String(source.shopId ?? ''), 'shopId');
         const productId = this.positiveInteger(String(source.productId ?? ''), 'productId');
         const bundleId = String(source.bundleId ?? '');
-        if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(bundleId)) {
+        if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(bundleId)) {
             throw new BadRequestException('bundleId должен быть корректным UUID');
         }
         if (!(await this.repository.existsInInventory(bundleId))) {
@@ -29,6 +29,13 @@ export class FlowwowProductLinksService {
         const bundle = await this.repository.find(shopId, productId);
         if (!bundle) throw new BadRequestException('Не удалось сохранить связь с букетом');
         return { shopId, productId, bundle };
+    }
+
+    public async remove(shopIdValue: string | undefined, productIdValue: string | undefined): Promise<{ shopId: number; productId: number; bundleId: null }> {
+        const shopId = this.positiveInteger(shopIdValue, 'shopId');
+        const productId = this.positiveInteger(productIdValue, 'productId');
+        await this.repository.remove(shopId, productId);
+        return { shopId, productId, bundleId: null };
     }
 
     private positiveInteger(value: string | undefined, field: string): number {

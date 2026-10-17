@@ -5,6 +5,11 @@ import { Column, Entity, Index, PrimaryColumn } from 'typeorm';
 @Index('ix_flowwow_products_shop_archived', ['shopId', 'isArchived'])
 @Index('ix_flowwow_products_shop_category', ['shopId', 'categoryId'])
 export class FlowwowProduct {
+    bundleId?: string | null;
+    costPriceAmount?: string | null;
+    flowwowExpenses?: string | null;
+    profitAmount?: string | null;
+    availableToAssemble?: number | null;
     @PrimaryColumn({ name: 'shop_id', type: 'integer' }) shopId: number;
     @PrimaryColumn({ name: 'product_id', type: 'integer' }) productId: number;
     @Column({ name: 'offer_id', type: 'varchar', length: 50, nullable: true }) offerId: string | null;

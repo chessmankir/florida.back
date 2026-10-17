@@ -9,9 +9,10 @@ import { ProductsRepository } from './products.repository.js';
 import { ProductsService } from './products.service.js';
 
 @Module({
-    imports: [TypeOrmModule.forFeature([ProductProfit], 'seller')],
+    imports: [TypeOrmModule.forFeature([ProductProfit], 'florida')],
     controllers: [ProductsController],
     providers: [ProductProfitClient, ProductsRepository, ProductsProfitSyncService, ProductsService],
     exports: [ProductsService, ProductsRepository],
 })
 export class ProductsModule {}
+

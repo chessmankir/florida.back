@@ -36,13 +36,54 @@ export interface MoyskladStockRow {
     daysOnStock?: number;
 }
 
+export interface MoyskladBundleComponentRow {
+    id: string;
+    assortment: { meta: MoyskladMeta };
+    quantity: number;
+}
+
 export interface MoyskladPage<T> {
     meta: { size: number; limit: number; offset: number };
     rows: T[];
 }
 
 export type MoyskladInventorySnapshot = Omit<MoyskladInventoryProduct, 'createdAt' | 'updatedAt'>;
-export interface MoyskladInventorySyncResult { assortmentReceived: number; stockRowsReceived: number; saved: number; }
+export interface MoyskladBundleComponentSnapshot {
+    bundleId: string;
+    componentId: string;
+    assortmentId: string;
+    assortmentType: string;
+    quantity: string;
+    syncedAt: Date;
+}
+export interface MoyskladInventorySyncResult {
+    assortmentReceived: number;
+    stockRowsReceived: number;
+    bundlesReceived: number;
+    componentsReceived: number;
+    saved: number;
+}
+
+export interface MoyskladBundleComponentItem {
+    componentId: string;
+    assortmentId: string;
+    assortmentType: string;
+    name: string;
+    code: string | null;
+    article: string | null;
+    quantity: string;
+    buyPriceMinor: string | null;
+    stockCostMinor: string | null;
+    unitCostMinor: string | null;
+    totalCostMinor: string | null;
+}
+
+export interface MoyskladBundleComponentsResponse {
+    bundleId: string;
+    bundleName: string;
+    items: MoyskladBundleComponentItem[];
+    totalCostMinor: string;
+}
 export interface MoyskladInventoryListOptions {
     page: number;
     limit: number;

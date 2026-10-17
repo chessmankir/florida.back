@@ -13,9 +13,10 @@ import { ExpenseLossPosition } from './models/loss-position.model.js';
 import { ExpenseLoss } from './models/loss.model.js';
 
 @Module({
-    imports: [TypeOrmModule.forFeature([ExpenseItem, PaymentOut, CashOut, ExpenseLoss, ExpenseLossPosition], 'seller')],
+    imports: [TypeOrmModule.forFeature([ExpenseItem, PaymentOut, CashOut, ExpenseLoss, ExpenseLossPosition], 'florida')],
     controllers: [ExpensesController],
     providers: [ExpensesClient, ExpensesRepository, ExpensesSyncService, ExpensesService],
     exports: [ExpensesService, ExpensesRepository],
 })
 export class ExpensesModule {}
+

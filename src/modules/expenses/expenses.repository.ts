@@ -18,19 +18,19 @@ import { ExpenseLossPosition } from './models/loss-position.model.js';
 @Injectable()
 export class ExpensesRepository {
     public constructor(
-        @InjectRepository(ExpenseItem, 'seller')
+        @InjectRepository(ExpenseItem, 'florida')
         private readonly expenseItems: Repository<ExpenseItem>,
 
-        @InjectRepository(PaymentOut, 'seller')
+        @InjectRepository(PaymentOut, 'florida')
         private readonly paymentOuts: Repository<PaymentOut>,
 
-        @InjectRepository(CashOut, 'seller')
+        @InjectRepository(CashOut, 'florida')
         private readonly cashOuts: Repository<CashOut>,
 
-        @InjectRepository(ExpenseLoss, 'seller')
+        @InjectRepository(ExpenseLoss, 'florida')
         private readonly losses: Repository<ExpenseLoss>,
 
-        @InjectRepository(ExpenseLossPosition, 'seller')
+        @InjectRepository(ExpenseLossPosition, 'florida')
         private readonly lossPositions: Repository<ExpenseLossPosition>
     ) {}
 
@@ -507,3 +507,4 @@ export class ExpensesRepository {
         };
     }
 }
+

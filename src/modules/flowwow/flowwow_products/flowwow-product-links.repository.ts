@@ -15,7 +15,7 @@ export interface LinkedInventoryBundle {
 
 @Injectable()
 export class FlowwowProductLinksRepository {
-    public constructor(@InjectDataSource('seller') private readonly database: DataSource) {}
+    public constructor(@InjectDataSource('florida') private readonly database: DataSource) {}
 
     public async replace(shopId: number, productId: number, bundleId: string): Promise<void> {
         await this.database.transaction(async (manager) => {
@@ -29,9 +29,19 @@ export class FlowwowProductLinksRepository {
         });
     }
 
+    public async remove(shopId: number, productId: number): Promise<void> {
+        await this.database.getRepository(FlowwowProductInventoryLink).delete({
+            shopId,
+            flowwowProductId: productId,
+        });
+    }
+
     public async existsInInventory(bundleId: string): Promise<boolean> {
         const rows = await this.database.query<Array<{ exists: boolean }>>(
-            'SELECT EXISTS(SELECT 1 FROM moysklad_inventory_products WHERE id = $1) AS "exists"',
+            `SELECT EXISTS(
+                SELECT 1 FROM moysklad_inventory_products
+                WHERE id = $1 AND product_type = 'bundle'
+            ) AS "exists"`,
             [bundleId]
         );
         return rows[0]?.exists === true;
@@ -59,3 +69,4 @@ export class FlowwowProductLinksRepository {
         return rows[0] ?? null;
     }
 }
+

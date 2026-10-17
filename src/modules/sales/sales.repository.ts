@@ -10,7 +10,7 @@ import type { SalesOrderSnapshot } from './types/sales.types.js';
 export class SalesRepository {
     private readonly batchSize = 100;
 
-    constructor(@InjectDataSource('seller') private readonly database: DataSource) {}
+    constructor(@InjectDataSource('florida') private readonly database: DataSource) {}
 
     public async saveChunk(snapshots: SalesOrderSnapshot[]): Promise<void> {
         if (snapshots.length === 0) return;
@@ -43,3 +43,4 @@ export class SalesRepository {
         });
     }
 }
+

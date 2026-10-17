@@ -16,7 +16,7 @@ import type {
 export class FlowwowOrdersRepository {
     private readonly batchSize = 100;
 
-    public constructor(@InjectDataSource('seller') private readonly database: DataSource) {}
+    public constructor(@InjectDataSource('florida') private readonly database: DataSource) {}
 
     public async saveChunk(snapshots: FlowwowOrderSnapshot[]): Promise<void> {
         if (snapshots.length === 0) return;
@@ -141,6 +141,27 @@ export class FlowwowOrdersRepository {
 
         const items = await this.database.query<FlowwowOrderListItem[]>(
             `
+                WITH enriched_positions AS (
+                    SELECT
+                        p.*,
+                        link.moysklad_product_id AS bundle_id,
+                        ROUND(bundle_cost.bundle_cost_minor / 100, 2) AS unit_cost_amount,
+                        ROUND(bundle_cost.bundle_cost_minor * p.quantity / 100, 2) AS total_cost_amount
+                    FROM flowwow_order_positions p
+                    LEFT JOIN flowwow_product_inventory_links link
+                        ON link.shop_id = p.shop_id
+                       AND link.flowwow_product_id = p.product_id
+                    LEFT JOIN LATERAL (
+                        SELECT SUM(
+                            component.quantity
+                            * COALESCE(inventory.stock_cost_minor, inventory.buy_price_minor)
+                        ) AS bundle_cost_minor
+                        FROM moysklad_bundle_components component
+                        INNER JOIN moysklad_inventory_products inventory
+                            ON inventory.id = component.assortment_id
+                        WHERE component.bundle_id = link.moysklad_product_id
+                    ) bundle_cost ON true
+                )
                 SELECT
                     o.shop_id AS "shopId",
                     s.name AS "shopName",
@@ -155,6 +176,15 @@ export class FlowwowOrdersRepository {
                     o.bonus_amount::text AS "bonusAmount",
                     o.fixed_commission_amount::text AS "fixedCommissionAmount",
                     o.variable_commission_amount::text AS "variableCommissionAmount",
+                    CASE
+                        WHEN COUNT(p.total_cost_amount) > 0
+                        THEN ROUND(SUM(p.total_cost_amount), 2)::text
+                        ELSE NULL
+                    END AS "costPriceAmount",
+                    (
+                        COUNT(p.line_index) > 0
+                        AND COUNT(p.line_index) = COUNT(p.total_cost_amount)
+                    ) AS "costPriceComplete",
                     o.source_host AS "sourceHost",
                     COALESCE(
                         json_agg(
@@ -170,14 +200,17 @@ export class FlowwowOrdersRepository {
                                 'discountAmount', p.discount_amount::text,
                                 'priceAfterDiscountAmount', p.price_after_discount_amount::text,
                                 'discountPercent', p.discount_percent::text,
-                                'currencyCode', p.currency_code
+                                'currencyCode', p.currency_code,
+                                'bundleId', p.bundle_id,
+                                'unitCostAmount', p.unit_cost_amount::text,
+                                'totalCostAmount', p.total_cost_amount::text
                             ) ORDER BY p.line_index
                         ) FILTER (WHERE p.line_index IS NOT NULL),
                         '[]'::json
                     ) AS positions
                 FROM flowwow_orders o
                 LEFT JOIN flowwow_shops s ON s.shop_id = o.shop_id
-                LEFT JOIN flowwow_order_positions p
+                LEFT JOIN enriched_positions p
                     ON p.shop_id = o.shop_id AND p.order_id = o.order_id
                 WHERE ${where}
                 GROUP BY o.shop_id, o.order_id, s.name, s.address
@@ -207,3 +240,4 @@ export class FlowwowOrdersRepository {
         };
     }
 }
+

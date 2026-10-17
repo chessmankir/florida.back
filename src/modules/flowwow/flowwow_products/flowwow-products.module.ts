@@ -13,7 +13,7 @@ import { FlowwowProductsRepository } from './flowwow-products.repository.js';
 import { FlowwowProductsService } from './flowwow-products.service.js';
 
 @Module({
-    imports: [FlowwowOrdersModule, TypeOrmModule.forFeature([FlowwowProduct, FlowwowProductInventoryLink], 'seller')],
+    imports: [FlowwowOrdersModule, TypeOrmModule.forFeature([FlowwowProduct, FlowwowProductInventoryLink], 'florida')],
     controllers: [FlowwowProductsController],
     providers: [
         FlowwowProductsClient,
@@ -26,3 +26,4 @@ import { FlowwowProductsService } from './flowwow-products.service.js';
     exports: [FlowwowProductsRepository, FlowwowProductsService],
 })
 export class FlowwowProductsModule {}
+

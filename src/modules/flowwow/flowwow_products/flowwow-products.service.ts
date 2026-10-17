@@ -2,6 +2,7 @@ import { BadGatewayException, BadRequestException, Injectable, Logger } from '@n
 
 import { FlowwowShopsRepository } from '../flowwow_orders/flowwow-shops.repository.js';
 import { FlowwowShopsService } from '../flowwow_orders/flowwow-shops.service.js';
+import { FlowwowCommissionService } from '../flowwow_orders/flowwow-commission.service.js';
 import { FlowwowProductsClient } from './clients/flowwow-products.client.js';
 import { FlowwowProductsMapper } from './mappers/flowwow-products.mapper.js';
 import { FlowwowProductsRepository } from './flowwow-products.repository.js';
@@ -23,7 +24,8 @@ export class FlowwowProductsService {
         private readonly mapper: FlowwowProductsMapper,
         private readonly repository: FlowwowProductsRepository,
         private readonly shops: FlowwowShopsRepository,
-        private readonly shopsService: FlowwowShopsService
+        private readonly shopsService: FlowwowShopsService,
+        private readonly commission: FlowwowCommissionService
     ) {}
 
     public async syncAll(): Promise<FlowwowProductsSyncResult> {
@@ -56,7 +58,7 @@ export class FlowwowProductsService {
         const limit = this.parsePositiveInteger(query.limit, 50, 'limit');
         if (limit > 100) throw new BadRequestException('limit не может быть больше 100');
         const statuses = ['all', 'active', 'hidden', 'archived'] as const;
-        const sortFields = ['productId', 'productSales', 'stock', 'itemViews'] as const;
+        const sortFields = ['productId', 'productSales', 'stock', 'itemViews', 'profit'] as const;
         const sortAliases = { sales: 'productSales', views: 'itemViews' } as const;
         const sortDirections = ['asc', 'desc'] as const;
         const status = query.status ?? 'active';
@@ -74,7 +76,7 @@ export class FlowwowProductsService {
         }
         if (!sortFields.includes(sortBy as typeof sortFields[number])) {
             throw new BadRequestException(
-                'sortBy должен быть productId, sales, productSales, stock, views или itemViews'
+                'sortBy должен быть productId, sales, productSales, stock, views, itemViews или profit'
             );
         }
         if (!sortDirections.includes(sortDirection as typeof sortDirections[number])) {
@@ -90,9 +92,18 @@ export class FlowwowProductsService {
                 sortBy: sortBy as typeof sortFields[number],
                 sortDirection: sortDirection as typeof sortDirections[number],
                 search,
+                flowwowExpenseRate: this.commission.calculate(100).flowwowExpenses / 100,
             }),
             this.shops.findActiveShops(),
         ]);
+        for (const product of result.items) {
+            if (product.costPriceAmount === null || product.costPriceAmount === undefined) continue;
+            const expenses = this.commission.calculate(product.price).flowwowExpenses;
+            product.flowwowExpenses = expenses.toFixed(2);
+            product.profitAmount = (
+                Number(product.price) - Number(product.costPriceAmount) - expenses
+            ).toFixed(2);
+        }
         return { ...result, shops };
     }
 

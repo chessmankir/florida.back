@@ -14,10 +14,12 @@ import { FlowwowOrdersRepository } from './flowwow-orders.repository.js';
 import { FlowwowOrdersService } from './flowwow-orders.service.js';
 import { FlowwowShopsRepository } from './flowwow-shops.repository.js';
 import { FlowwowShopsService } from './flowwow-shops.service.js';
+import { FlowwowCommissionController } from './flowwow-commission.controller.js';
+import { FlowwowCommissionService } from './flowwow-commission.service.js';
 
 @Module({
-    imports: [TypeOrmModule.forFeature([FlowwowOrder, FlowwowOrderPosition, FlowwowShop], 'seller')],
-    controllers: [FlowwowOrdersController],
+    imports: [TypeOrmModule.forFeature([FlowwowOrder, FlowwowOrderPosition, FlowwowShop], 'florida')],
+    controllers: [FlowwowOrdersController, FlowwowCommissionController],
     providers: [
         FlowwowAxiosService,
         FlowwowOrdersClient,
@@ -28,6 +30,7 @@ import { FlowwowShopsService } from './flowwow-shops.service.js';
         FlowwowShopsRepository,
         FlowwowShopsService,
         FlowwowOrdersService,
+        FlowwowCommissionService,
     ],
     exports: [
         FlowwowAxiosService,
@@ -35,6 +38,8 @@ import { FlowwowShopsService } from './flowwow-shops.service.js';
         FlowwowShopsRepository,
         FlowwowOrdersService,
         FlowwowShopsService,
+        FlowwowCommissionService,
     ],
 })
 export class FlowwowOrdersModule {}
+

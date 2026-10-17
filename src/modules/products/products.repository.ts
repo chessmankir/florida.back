@@ -13,7 +13,7 @@ import {
 @Injectable()
 export class ProductsRepository {
     public constructor(
-        @InjectRepository(ProductProfit, 'seller')
+        @InjectRepository(ProductProfit, 'florida')
         private readonly productProfit: Repository<ProductProfit>
     ) {}
 
@@ -352,3 +352,4 @@ export class ProductsRepository {
         };
     }
 }
+

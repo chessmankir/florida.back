@@ -12,7 +12,7 @@ import { ScheduleModule } from '@nestjs/schedule';
         ConfigModule.forRoot({
             isGlobal: true,
             validationSchema: Joi.object({
-                PORT: Joi.number().port().default(3017),
+                PORT: Joi.number().port().default(3025),
                 MOYSKLAD: Joi.string().min(1).required(),
                 POSTGRES_HOST: Joi.string().required(),
                 POSTGRES_PORT: Joi.number().port().default(5432),
@@ -28,19 +28,22 @@ import { ScheduleModule } from '@nestjs/schedule';
                 FLOWWOW_SYNC_PAGE_SIZE: Joi.number().integer().min(1).max(100).default(100),
                 FLOWWOW_SYNC_LOOKBACK_DAYS: Joi.number().integer().min(1).default(90),
                 FLOWWOW_SYNC_FUTURE_DAYS: Joi.number().integer().min(1).default(365),
+                FLOWWOW_CUSTOMER_BONUS_PERCENT: Joi.number().min(0).max(100).default(4),
+                FLOWWOW_FIXED_COMMISSION_PERCENT: Joi.number().min(0).max(100).default(27),
+                FLOWWOW_VARIABLE_COMMISSION_PERCENT: Joi.number().min(0).max(100).default(2.5),
             }),
         }),
 
         ScheduleModule.forRoot(),
         SynchronizationModule,
         TypeOrmModule.forRootAsync({
-            name: 'seller',
+            name: 'florida',
 
             inject: [ConfigService],
 
             useFactory: (configService: ConfigService) => ({
                 type: 'postgres' as const,
-                name: 'seller',
+                name: 'florida',
 
                 host: configService.getOrThrow<string>('POSTGRES_HOST'),
 

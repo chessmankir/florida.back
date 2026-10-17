@@ -111,9 +111,10 @@ export interface FlowwowProductsListOptions {
     page: number;
     limit: number;
     status: 'all' | 'active' | 'hidden' | 'archived';
-    sortBy: 'productId' | 'productSales' | 'stock' | 'itemViews';
+    sortBy: 'productId' | 'productSales' | 'stock' | 'itemViews' | 'profit';
     sortDirection: 'asc' | 'desc';
     search: string | null;
+    flowwowExpenseRate: number;
 }
 
 export interface FlowwowProductsListResponse {

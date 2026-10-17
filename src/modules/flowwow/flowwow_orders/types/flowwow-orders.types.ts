@@ -121,6 +121,9 @@ export interface FlowwowOrderListPosition {
     priceAfterDiscountAmount: string;
     discountPercent: string | null;
     currencyCode: string | null;
+    bundleId: string | null;
+    unitCostAmount: string | null;
+    totalCostAmount: string | null;
 }
 
 export interface FlowwowOrderListItem {
@@ -137,6 +140,8 @@ export interface FlowwowOrderListItem {
     bonusAmount: string | null;
     fixedCommissionAmount: string | null;
     variableCommissionAmount: string | null;
+    costPriceAmount: string | null;
+    costPriceComplete: boolean;
     sourceHost: string | null;
     positions: FlowwowOrderListPosition[];
 }

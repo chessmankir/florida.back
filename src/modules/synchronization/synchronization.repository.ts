@@ -1,12 +1,17 @@
 import { Injectable } from '@nestjs/common';
-import { InjectDataSource } from '@nestjs/typeorm';
+import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { randomUUID } from 'node:crypto';
-import { DataSource } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import type { SyncResult, SyncScope } from './types/synchronization.types.js';
+import { SynchronizationRun } from './models/synchronization-run.model.js';
 
 @Injectable()
 export class SynchronizationRepository {
-    constructor(@InjectDataSource('seller') private readonly database: DataSource) {}
+    constructor(
+        @InjectDataSource('florida') private readonly database: DataSource,
+        @InjectRepository(SynchronizationRun, 'florida')
+        private readonly runs: Repository<SynchronizationRun>
+    ) {}
 
     public async withLock(scope: SyncScope, work: () => Promise<SyncResult>): Promise<SyncResult | null> {
         const runner = this.database.createQueryRunner();
@@ -19,21 +24,25 @@ export class SynchronizationRepository {
             if (!locked) return null;
             // Acquiring the lock proves no previous compliant worker still owns a run.
             await runner.query("UPDATE synchronization_runs SET status = 'interrupted', finished_at = now() WHERE status = 'running'");
-            await runner.query("INSERT INTO synchronization_runs(id, scope, status) VALUES ($1, $2, 'running')", [runId, scope]);
+            await this.runs.insert({
+                id: runId,
+                scope,
+                status: 'running',
+                finishedAt: null,
+                counts: {},
+                errors: [],
+            });
             try {
                 const result = await work();
-                await runner.query(
-                    'UPDATE synchronization_runs SET status = $2, finished_at = now(), counts = $3::jsonb, errors = $4::jsonb WHERE id = $1',
-                    [
-                        runId,
-                        Object.keys(result.errors).length ? 'failed' : 'completed',
-                        JSON.stringify(result.counts),
-                        JSON.stringify(result.errors),
-                    ]
-                );
+                await this.runs.update(runId, {
+                    status: Object.keys(result.errors).length ? 'failed' : 'completed',
+                    finishedAt: new Date(),
+                    counts: result.counts,
+                    errors: result.errors,
+                });
                 return result;
             } catch (error) {
-                await runner.query("UPDATE synchronization_runs SET status = 'failed', finished_at = now() WHERE id = $1", [runId]);
+                await this.runs.update(runId, { status: 'failed', finishedAt: new Date() });
                 throw error;
             }
         } finally {

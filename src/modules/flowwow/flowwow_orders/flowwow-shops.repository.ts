@@ -8,7 +8,7 @@ import type { FlowwowShopSnapshot } from './types/flowwow-orders.types.js';
 @Injectable()
 export class FlowwowShopsRepository {
     public constructor(
-        @InjectRepository(FlowwowShop, 'seller') private readonly shops: Repository<FlowwowShop>
+        @InjectRepository(FlowwowShop, 'florida') private readonly shops: Repository<FlowwowShop>
     ) {}
 
     public async saveChunk(shops: FlowwowShopSnapshot[]): Promise<void> {
@@ -33,3 +33,4 @@ export class FlowwowShopsRepository {
         });
     }
 }
+

@@ -46,22 +46,22 @@ export class SynchronizationService {
 
          /*if (scope === 'all' || scope === 'sales') {
             await this.synchronizeSales(counts, errors);
-        }
+        }*/
 
-           if (scope === 'all' || scope === 'products') {
+         /*  if (scope === 'all' || scope === 'products') {
             await this.synchronizeProducts(counts, errors);
-        }
-        if (scope === 'all' || scope === 'expenses') {
+        }*/
+       /* if (scope === 'all' || scope === 'expenses') {
             await this.synchronizeExpenses(counts, errors);
         }
 */
-       /* if (scope === 'all' || scope === 'flowwow_orders') {
+       if (scope === 'all' || scope === 'flowwow_orders') {
             await this.synchronizeFlowwowOrders(counts, errors);
-        }*/
+        }
 
-       /* if (scope === 'all' || scope === 'flowwow_products') {
+        if (scope === 'all' || scope === 'flowwow_products') {
             await this.synchronizeFlowwowProducts(counts, errors);
-        }*/
+        }
 
         if (scope === 'all' || scope === 'moysklad_inventory') {
             await this.synchronizeMoyskladInventory(counts, errors);
@@ -80,6 +80,7 @@ export class SynchronizationService {
         try {
             const result = await this.moyskladInventory.syncAll();
             counts.moysklad_inventory = result.saved;
+            counts.moysklad_bundle_components = result.componentsReceived;
             this.logger.log({ event: 'moysklad_inventory_synchronization_finished', ...result });
         } catch (error: unknown) {
             const cause = error instanceof Error ? error.message : String(error);

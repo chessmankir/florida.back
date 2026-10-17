@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Post, Query } from '@nestjs/common';
 
 import { FlowwowProductsService } from './flowwow-products.service.js';
 import { FlowwowProductLinksService } from './flowwow-product-links.service.js';
@@ -25,6 +25,14 @@ export class FlowwowProductsController {
     @Post('links')
     public saveLinks(@Body() body: unknown) {
         return this.links.save(body);
+    }
+
+    @Delete('links')
+    public removeLinks(
+        @Query('shopId') shopId?: string,
+        @Query('productId') productId?: string
+    ) {
+        return this.links.remove(shopId, productId);
     }
 
     @Get()

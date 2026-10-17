@@ -10,8 +10,9 @@ import { SalesRepository } from './sales.repository.js';
 import { SalesService } from './sales.service.js';
 
 @Module({
-    imports: [TypeOrmModule.forFeature([SalesCustomerOrder, SalesCustomerOrderPosition], 'seller')],
+    imports: [TypeOrmModule.forFeature([SalesCustomerOrder, SalesCustomerOrderPosition], 'florida')],
     providers: [CustomerOrderClient, CustomerOrderMapper, SalesRepository, SalesCustomerOrderSyncService, SalesService],
     exports: [SalesRepository, SalesService],
 })
 export class SalesModule {}
+
