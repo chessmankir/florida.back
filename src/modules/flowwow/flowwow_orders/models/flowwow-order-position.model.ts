@@ -1,8 +1,9 @@
+import { AccountOwnedEntity } from '../../../auth/models/account-owned.model.js';
 import { Column, Entity, Index, PrimaryColumn } from 'typeorm';
 
 @Entity('flowwow_order_positions')
 @Index('ix_flowwow_order_positions_product', ['productId'])
-export class FlowwowOrderPosition {
+export class FlowwowOrderPosition extends AccountOwnedEntity {
     @PrimaryColumn({ name: 'shop_id', type: 'integer' }) shopId: number;
     @PrimaryColumn({ name: 'order_id', type: 'integer' }) orderId: number;
     @PrimaryColumn({ name: 'line_index', type: 'integer' }) lineIndex: number;
@@ -24,3 +25,4 @@ export class FlowwowOrderPosition {
     @Column({ name: 'currency_code', type: 'varchar', length: 3, nullable: true }) currencyCode: string | null;
     @Column({ name: 'raw_json', type: 'jsonb' }) rawJson: unknown;
 }
+

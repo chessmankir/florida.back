@@ -85,6 +85,7 @@ export interface MoyskladBundleComponentsResponse {
     totalCostMinor: string;
 }
 export interface MoyskladInventoryListOptions {
+    accountId: string;
     page: number;
     limit: number;
     search: string | null;

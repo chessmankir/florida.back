@@ -1,10 +1,11 @@
+import { AccountOwnedEntity } from '../../../auth/models/account-owned.model.js';
 import { Column, Entity, Index, PrimaryColumn } from 'typeorm';
 
 @Entity('flowwow_products')
 @Index('ix_flowwow_products_shop_active', ['shopId', 'isActive'])
 @Index('ix_flowwow_products_shop_archived', ['shopId', 'isArchived'])
 @Index('ix_flowwow_products_shop_category', ['shopId', 'categoryId'])
-export class FlowwowProduct {
+export class FlowwowProduct extends AccountOwnedEntity {
     bundleId?: string | null;
     costPriceAmount?: string | null;
     flowwowExpenses?: string | null;
@@ -39,3 +40,4 @@ export class FlowwowProduct {
     @Column({ type: 'jsonb', nullable: true }) properties: Record<string, unknown> | null;
     @Column({ name: 'synced_at', type: 'timestamptz' }) syncedAt: Date;
 }
+

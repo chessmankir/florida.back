@@ -21,7 +21,7 @@ export class ProductsProfitSyncService {
      *
      * day должен иметь формат YYYY-MM-DD.
      */
-    public async syncDay(day: string): Promise<ProductProfitSyncResult> {
+    public async syncDay(accountId: string, token: string, day: string): Promise<ProductProfitSyncResult> {
         this.assertDate(day);
 
         const pageSize = this.getPageSize();
@@ -33,7 +33,7 @@ export class ProductsProfitSyncService {
         let saved = 0;
 
         while (true) {
-            const page = await this.client.getPage({
+            const page = await this.client.getPage(token, {
                 momentFrom: `${day} 00:00:00`,
                 momentTo: `${day} 23:59:59`,
                 limit: pageSize,
@@ -46,7 +46,7 @@ export class ProductsProfitSyncService {
                 productIds.add(entity.productId);
             }
 
-            saved += await this.repository.upsertProfit(entities);
+            saved += await this.repository.upsertProfit(accountId, entities);
             received += page.rows.length;
             offset += page.rows.length;
 
@@ -65,7 +65,7 @@ export class ProductsProfitSyncService {
          * Выполняем очистку только после успешного получения всех страниц.
          * Поэтому временная ошибка API не удалит уже сохранённые данные.
          */
-        await this.repository.deleteMissingForDate(day, [...productIds]);
+        await this.repository.deleteMissingForDate(accountId, day, [...productIds]);
 
         return {
             periodDate: day,
@@ -78,8 +78,8 @@ export class ProductsProfitSyncService {
      * Используется ежедневной синхронизацией.
      * Берётся последний полностью завершённый день по Москве.
      */
-    public async syncPreviousDay(): Promise<ProductProfitSyncResult> {
-        return this.syncDay(this.getPreviousMoscowDate());
+    public async syncPreviousDay(accountId: string, token: string): Promise<ProductProfitSyncResult> {
+        return this.syncDay(accountId, token, this.getPreviousMoscowDate());
     }
 
     private getPageSize(): number {
@@ -116,7 +116,7 @@ export class ProductsProfitSyncService {
     }
 
     public async syncRange(
-        dateFrom: string,
+        accountId: string, token: string, dateFrom: string,
         dateTo: string,
     ): Promise<ProductProfitSyncResult[]> {
         this.assertDate(dateFrom);
@@ -146,7 +146,7 @@ export class ProductsProfitSyncService {
              * Здесь обязательно await.
              * Дни синхронизируются строго последовательно.
              */
-            const result = await this.syncDay(day);
+            const result = await this.syncDay(accountId, token, day);
 
             results.push(result);
         }

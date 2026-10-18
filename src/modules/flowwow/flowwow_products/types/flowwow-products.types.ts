@@ -45,6 +45,7 @@ export interface FlowwowProductsPage {
 }
 
 export interface FlowwowProductsRequest {
+    status: 'active';
     page: number;
     limit: number;
     withArchive: boolean;
@@ -107,10 +108,13 @@ export interface FlowwowProductStatusResponse {
 }
 
 export interface FlowwowProductsListOptions {
+    accountId: string;
     shopId: number | null;
     page: number;
     limit: number;
     status: 'all' | 'active' | 'hidden' | 'archived';
+    linkStatus: 'all' | 'linked' | 'unlinked';
+    availability: 'all' | 'in_stock' | 'out_of_stock';
     sortBy: 'productId' | 'productSales' | 'stock' | 'itemViews' | 'profit';
     sortDirection: 'asc' | 'desc';
     search: string | null;
@@ -122,6 +126,8 @@ export interface FlowwowProductsListResponse {
     filters: {
         shopId: number | null;
         status: FlowwowProductsListOptions['status'];
+        linkStatus: FlowwowProductsListOptions['linkStatus'];
+        availability: FlowwowProductsListOptions['availability'];
         sortBy: FlowwowProductsListOptions['sortBy'];
         sortDirection: FlowwowProductsListOptions['sortDirection'];
         search: string | null;
@@ -133,4 +139,21 @@ export interface FlowwowProductsListResponse {
         total: number;
         totalPages: number;
     };
+}
+
+export interface FlowwowProductAvailabilityResponse {
+    shopId: number;
+    productId: number;
+    linked: boolean;
+    bundleId: string | null;
+    hasComponents: boolean;
+    canAssemble: boolean;
+    availableToAssemble: number;
+    missingComponents: Array<{
+        componentId: string;
+        name: string;
+        requiredQuantity: number;
+        availableQuantity: number;
+        missingQuantity: number;
+    }>;
 }

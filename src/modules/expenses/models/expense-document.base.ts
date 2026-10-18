@@ -1,6 +1,7 @@
+import { AccountOwnedEntity } from '../../auth/models/account-owned.model.js';
 import { Column, PrimaryColumn } from 'typeorm';
 
-export abstract class ExpenseDocumentBase {
+export abstract class ExpenseDocumentBase extends AccountOwnedEntity {
     @PrimaryColumn({
         type: 'uuid',
     })
@@ -139,3 +140,4 @@ export abstract class ExpenseDocumentBase {
     })
     syncedAt!: Date;
 }
+

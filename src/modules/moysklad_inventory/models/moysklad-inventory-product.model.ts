@@ -1,9 +1,10 @@
+import { AccountOwnedEntity } from '../../auth/models/account-owned.model.js';
 import { Column, CreateDateColumn, Entity, Index, PrimaryColumn, UpdateDateColumn } from 'typeorm';
 
 @Entity('moysklad_inventory_products')
 @Index('ix_moysklad_inventory_name', ['name'])
 @Index('ix_moysklad_inventory_type_archived', ['productType', 'archived'])
-export class MoyskladInventoryProduct {
+export class MoyskladInventoryProduct extends AccountOwnedEntity {
     @PrimaryColumn({ type: 'uuid' }) id: string;
     @Column({ name: 'product_type', type: 'varchar', length: 32 }) productType: string;
     @Column({ name: 'parent_product_id', type: 'uuid', nullable: true }) parentProductId: string | null;
@@ -30,3 +31,4 @@ export class MoyskladInventoryProduct {
     @CreateDateColumn({ name: 'created_at', type: 'timestamptz' }) createdAt: Date;
     @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' }) updatedAt: Date;
 }
+

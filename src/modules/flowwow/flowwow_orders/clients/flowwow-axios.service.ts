@@ -1,5 +1,4 @@
-import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import { Injectable, Logger } from '@nestjs/common';
 import axios, {
     type AxiosInstance,
     type AxiosRequestConfig,
@@ -9,6 +8,7 @@ import axios, {
 
 interface RetriableConfig extends InternalAxiosRequestConfig {
     __flowwowRetryCount?: number;
+    __flowwowGatewayRetryCount?: number;
 }
 
 @Injectable()
@@ -17,14 +17,13 @@ export class FlowwowAxiosService {
     private static readonly MAX_RETRIES = 5;
     private static readonly MIN_RETRY_DELAY_MS = 5_000;
     private static readonly FALLBACK_RETRY_AFTER_SEC = 60;
+    private static readonly MAX_GATEWAY_RETRIES = 2;
 
     private readonly logger = new Logger(FlowwowAxiosService.name);
     private readonly http: AxiosInstance;
+    private readonly cookies = new Map<string, string>();
 
-    public constructor(config: ConfigService) {
-        const token = config.get<string>('FLOWWOW_TOKEN', '').trim();
-        if (!token) throw new ServiceUnavailableException('FLOWWOW_TOKEN не настроен');
-
+    public constructor() {
         this.http = axios.create({
             baseURL: 'https://apis.flowwow.com',
             timeout: FlowwowAxiosService.TIMEOUT_MS,
@@ -32,27 +31,80 @@ export class FlowwowAxiosService {
             headers: {
                 Accept: 'application/json',
                 'Content-Type': 'application/json',
-                Authorization: `Bearer ${token}`,
             },
         });
         this.registerInterceptors();
     }
 
-    public get<TResponse>(url: string, config?: AxiosRequestConfig): Promise<AxiosResponse<TResponse>> {
-        return this.http.get<TResponse>(url, config);
+    public get<TResponse>(token: string, url: string, config?: AxiosRequestConfig): Promise<AxiosResponse<TResponse>> {
+        const requestConfig = this.withToken(token, config);
+        this.logRequest('get', url, requestConfig, undefined, token);
+        return this.http.get<TResponse>(url, requestConfig);
     }
 
-    public post<TResponse>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<AxiosResponse<TResponse>> {
-        return this.http.post<TResponse>(url, data, config);
+    public post<TResponse>(token: string, url: string, data?: unknown, config?: AxiosRequestConfig): Promise<AxiosResponse<TResponse>> {
+        const requestConfig = this.withToken(token, config);
+        this.logRequest('post', url, requestConfig, data, token);
+        return this.http.post<TResponse>(url, data, requestConfig);
     }
 
     public request<TResponse>(config: AxiosRequestConfig): Promise<AxiosResponse<TResponse>> {
         return this.http.request<TResponse>(config);
     }
 
+    private withToken(token: string, config?: AxiosRequestConfig): AxiosRequestConfig {
+        const normalizedToken = this.normalizeToken(token);
+        const cookie = this.cookieHeader();
+        return {
+            ...config,
+            headers: {
+                ...config?.headers,
+                Authorization: `Bearer ${normalizedToken}`,
+                ...(cookie ? { Cookie: cookie } : {}),
+            },
+        };
+    }
+
+    private normalizeToken(token: string): string {
+        return token
+            .trim()
+            .replace(/^Bearer\s+/i, '')
+            .trim()
+            .replace(/^(["'])(.*)\1$/, '$2')
+            .replace(/[\u200B-\u200D\uFEFF]/g, '')
+            .replace(/\s+/g, '')
+            .trim();
+    }
+
+    private logRequest(
+        method: string,
+        url: string,
+        config: AxiosRequestConfig,
+        data: unknown,
+        originalToken: string
+    ): void {
+        const token = this.normalizeToken(originalToken);
+        const maskedToken = token.length <= 10
+            ? '*'.repeat(token.length)
+            : `${token.slice(0, 5)}…${token.slice(-5)}`;
+
+        this.logger.log({
+            event: 'flowwow_request',
+            method,
+            url: `${this.http.defaults.baseURL ?? ''}${url}`,
+            params: config.params,
+            body: data,
+            authorization: `Bearer ${maskedToken}`,
+            tokenLength: token.length,
+        });
+    }
+
     private registerInterceptors(): void {
         this.http.interceptors.response.use(
-            (response: AxiosResponse) => response,
+            (response: AxiosResponse) => {
+                this.captureCookies(response.headers);
+                return response;
+            },
             async (error: unknown) => this.handleResponseError(error)
         );
     }
@@ -65,8 +117,33 @@ export class FlowwowAxiosService {
 
         const status = error.response?.status;
         const config = error.config as RetriableConfig | undefined;
+        const receivedCookies = this.captureCookies(error.response?.headers);
+
+        if (status === 423 && config) {
+            const retryCount = (config.__flowwowGatewayRetryCount ?? 0) + 1;
+            if (receivedCookies && retryCount <= FlowwowAxiosService.MAX_GATEWAY_RETRIES) {
+                const waitMs = retryCount * 1_000;
+                config.__flowwowGatewayRetryCount = retryCount;
+                config.headers.set('Cookie', this.cookieHeader());
+                this.logger.warn({
+                    event: 'flowwow_gateway_cookie_retry_scheduled',
+                    method: config.method,
+                    url: config.url,
+                    params: config.params,
+                    retryCount,
+                    maxRetries: FlowwowAxiosService.MAX_GATEWAY_RETRIES,
+                    waitMs,
+                    cookieNames: [...this.cookies.keys()],
+                });
+                await this.sleep(waitMs);
+                return this.http.request(config);
+            }
+        }
+
         if (status !== 429 || !config) {
             this.logRequestError(error);
+            const details = this.responseDetails(error.response?.data);
+            if (details) error.message = `${error.message}. Flowwow: ${details}`;
             return Promise.reject(error);
         }
 
@@ -111,7 +188,7 @@ export class FlowwowAxiosService {
         code?: string;
         message?: string;
         config?: AxiosRequestConfig;
-        response?: { status?: number; data?: unknown };
+        response?: { status?: number; data?: unknown; headers?: unknown };
     }): void {
         this.logger.error({
             event: 'flowwow_request_failed',
@@ -122,7 +199,39 @@ export class FlowwowAxiosService {
             url: error.config?.url,
             params: error.config?.params,
             response: error.response?.data,
+            responseHeaders: error.response?.headers,
         });
+    }
+
+    private captureCookies(headers: unknown): boolean {
+        if (!headers || typeof headers !== 'object') return false;
+        const source = headers as Record<string, unknown> & { getSetCookie?: () => string[] };
+        const setCookie = typeof source.getSetCookie === 'function'
+            ? source.getSetCookie()
+            : source['set-cookie'];
+        const values = Array.isArray(setCookie)
+            ? setCookie
+            : typeof setCookie === 'string'
+                ? [setCookie]
+                : [];
+        let changed = false;
+        for (const value of values) {
+            const pair = value.split(';', 1)[0];
+            const separator = pair.indexOf('=');
+            if (separator < 1) continue;
+            const name = pair.slice(0, separator).trim();
+            const cookieValue = pair.slice(separator + 1).trim();
+            if (!name) continue;
+            if (this.cookies.get(name) !== cookieValue) changed = true;
+            this.cookies.set(name, cookieValue);
+        }
+        return changed;
+    }
+
+    private cookieHeader(): string {
+        return [...this.cookies.entries()]
+            .map(([name, value]) => `${name}=${value}`)
+            .join('; ');
     }
 
     private getRetryAfterSeconds(headers: Record<string, unknown> | undefined): number {
@@ -139,5 +248,11 @@ export class FlowwowAxiosService {
 
     private sleep(ms: number): Promise<void> {
         return new Promise((resolve) => setTimeout(resolve, ms));
+    }
+
+    private responseDetails(value: unknown): string | null {
+        if (value === undefined || value === null || value === '') return null;
+        const text = typeof value === 'string' ? value : JSON.stringify(value);
+        return text.length > 500 ? `${text.slice(0, 500)}…` : text;
     }
 }

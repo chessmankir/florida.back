@@ -1,8 +1,9 @@
+import { AccountOwnedEntity } from '../../auth/models/account-owned.model.js';
 import { Column, Entity, Index, PrimaryColumn } from 'typeorm';
 
 @Entity('moysklad_bundle_components')
 @Index('ix_moysklad_bundle_components_assortment', ['assortmentId'])
-export class MoyskladBundleComponent {
+export class MoyskladBundleComponent extends AccountOwnedEntity {
     @PrimaryColumn({ name: 'bundle_id', type: 'uuid' }) bundleId: string;
     @PrimaryColumn({ name: 'component_id', type: 'uuid' }) componentId: string;
     @Column({ name: 'assortment_id', type: 'uuid' }) assortmentId: string;
@@ -10,3 +11,4 @@ export class MoyskladBundleComponent {
     @Column({ type: 'numeric', precision: 20, scale: 4 }) quantity: string;
     @Column({ name: 'synced_at', type: 'timestamptz' }) syncedAt: Date;
 }
+

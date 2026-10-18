@@ -13,10 +13,10 @@ import type {
 export class FlowwowOrdersClient {
     public constructor(private readonly http: FlowwowAxiosService) {}
 
-    public async getShops(request: FlowwowShopsRequest): Promise<FlowwowShopsPage> {
+    public async getShops(token: string, request: FlowwowShopsRequest): Promise<FlowwowShopsPage> {
         const page = request.page ?? 0;
         const limit = Math.min(Math.max(request.limit ?? 50, 1), 50);
-        const response = await this.http.post<FlowwowShopsPage>('/apiseller/shops', {
+        const response = await this.http.post<FlowwowShopsPage>(token, '/apiseller/shops', {
             ...request,
             page,
             limit,
@@ -25,18 +25,18 @@ export class FlowwowOrdersClient {
         return response.data;
     }
 
-    public async getOrders(shopId: number, request: FlowwowOrdersRequest = {}): Promise<FlowwowOrdersPage> {
+    public async getOrders(token: string, shopId: number, request: FlowwowOrdersRequest = {}): Promise<FlowwowOrdersPage> {
         const page = request.page ?? 1;
         const limit = Math.min(Math.max(request.limit ?? 100, 1), 100);
-        const response = await this.http.get<FlowwowOrdersPage>('/apiseller/orders/list', {
+        const response = await this.http.get<FlowwowOrdersPage>(token, '/apiseller/orders/list', {
             params: { shopId, ...request, page, limit },
         });
         this.validateOrdersPage(response.data, page, limit);
         return response.data;
     }
 
-    public async getOrder(shopId: number, orderId: number): Promise<FlowwowRemoteOrder> {
-        const response = await this.http.get<FlowwowRemoteOrder>('/apiseller/orders/view', {
+    public async getOrder(token: string, shopId: number, orderId: number): Promise<FlowwowRemoteOrder> {
+        const response = await this.http.get<FlowwowRemoteOrder>(token, '/apiseller/orders/view', {
             params: { shopId, orderId },
         });
         const order = response.data;

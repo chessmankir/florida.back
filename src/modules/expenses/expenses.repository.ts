@@ -34,7 +34,7 @@ export class ExpensesRepository {
         private readonly lossPositions: Repository<ExpenseLossPosition>
     ) {}
 
-    public async saveLossChunk(losses: ExpenseLoss[], positions: ExpenseLossPosition[]): Promise<number> {
+    public async saveLossChunk(accountId: string, losses: ExpenseLoss[], positions: ExpenseLossPosition[]): Promise<number> {
         if (losses.length === 0) {
             return 0;
         }
@@ -42,7 +42,7 @@ export class ExpensesRepository {
         const lossIds = losses.map((loss) => loss.id);
 
         await this.losses.manager.transaction(async (manager) => {
-            await manager.upsert(ExpenseLoss, losses, ['id']);
+            await manager.upsert(ExpenseLoss, losses.map((row) => ({ ...row, accountId })), ['id']);
 
             /*
              * Состав списания полностью заменяется,
@@ -50,11 +50,12 @@ export class ExpensesRepository {
              * в локальной базе.
              */
             await manager.delete(ExpenseLossPosition, {
+                accountId,
                 lossId: In(lossIds),
             });
 
             if (positions.length > 0) {
-                await manager.insert(ExpenseLossPosition, positions);
+                await manager.insert(ExpenseLossPosition, positions.map((row) => ({ ...row, accountId })));
             }
         });
 
@@ -62,17 +63,17 @@ export class ExpensesRepository {
     }
 
     public async deleteMissingLosses(
-        lossIds: string[],
+        accountId: string, lossIds: string[],
     ): Promise<void> {
         await this.losses.manager.transaction(
             async (manager) => {
                 if (lossIds.length === 0) {
                     await manager.query(
-                        'DELETE FROM expense_loss_positions',
+                        'DELETE FROM expense_loss_positions WHERE account_id = $1', [accountId]
                     );
 
                     await manager.query(
-                        'DELETE FROM expense_losses',
+                        'DELETE FROM expense_losses WHERE account_id = $1', [accountId]
                     );
 
                     return;
@@ -84,8 +85,9 @@ export class ExpensesRepository {
                         WHERE NOT (
                             loss_id = ANY($1::uuid[])
                             )
+                          AND account_id = $2::uuid
                     `,
-                    [lossIds],
+                    [lossIds, accountId],
                 );
 
                 await manager.query(
@@ -94,19 +96,20 @@ export class ExpensesRepository {
                         WHERE NOT (
                             id = ANY($1::uuid[])
                             )
+                          AND account_id = $2::uuid
                     `,
-                    [lossIds],
+                    [lossIds, accountId],
                 );
             },
         );
     }
 
-    public async upsertExpenseItems(rows: ExpenseItem[]): Promise<number> {
+    public async upsertExpenseItems(accountId: string, rows: ExpenseItem[]): Promise<number> {
         if (rows.length === 0) {
             return 0;
         }
 
-        await this.expenseItems.upsert(rows, {
+        await this.expenseItems.upsert(rows.map((row) => ({ ...row, accountId })), {
             conflictPaths: ['id'],
             skipUpdateIfNoValuesChanged: true,
         });
@@ -114,12 +117,12 @@ export class ExpensesRepository {
         return rows.length;
     }
 
-    public async upsertPaymentOuts(rows: PaymentOut[]): Promise<number> {
+    public async upsertPaymentOuts(accountId: string, rows: PaymentOut[]): Promise<number> {
         if (rows.length === 0) {
             return 0;
         }
 
-        await this.paymentOuts.upsert(rows, {
+        await this.paymentOuts.upsert(rows.map((row) => ({ ...row, accountId })), {
             conflictPaths: ['id'],
             skipUpdateIfNoValuesChanged: true,
         });
@@ -127,12 +130,12 @@ export class ExpensesRepository {
         return rows.length;
     }
 
-    public async upsertCashOuts(rows: CashOut[]): Promise<number> {
+    public async upsertCashOuts(accountId: string, rows: CashOut[]): Promise<number> {
         if (rows.length === 0) {
             return 0;
         }
 
-        await this.cashOuts.upsert(rows, {
+        await this.cashOuts.upsert(rows.map((row) => ({ ...row, accountId })), {
             conflictPaths: ['id'],
             skipUpdateIfNoValuesChanged: true,
         });
@@ -140,21 +143,21 @@ export class ExpensesRepository {
         return rows.length;
     }
 
-    public deleteMissingExpenseItems(ids: string[]): Promise<void> {
-        return this.deleteMissing('expense_items', ids);
+    public deleteMissingExpenseItems(accountId: string, ids: string[]): Promise<void> {
+        return this.deleteMissing(accountId, 'expense_items', ids);
     }
 
-    public deleteMissingPaymentOuts(ids: string[]): Promise<void> {
-        return this.deleteMissing('expense_payment_outs', ids);
+    public deleteMissingPaymentOuts(accountId: string, ids: string[]): Promise<void> {
+        return this.deleteMissing(accountId, 'expense_payment_outs', ids);
     }
 
-    public deleteMissingCashOuts(ids: string[]): Promise<void> {
-        return this.deleteMissing('expense_cash_outs', ids);
+    public deleteMissingCashOuts(accountId: string, ids: string[]): Promise<void> {
+        return this.deleteMissing(accountId, 'expense_cash_outs', ids);
     }
 
-    private async deleteMissing(tableName: 'expense_items' | 'expense_payment_outs' | 'expense_cash_outs', ids: string[]): Promise<void> {
+    private async deleteMissing(accountId: string, tableName: 'expense_items' | 'expense_payment_outs' | 'expense_cash_outs', ids: string[]): Promise<void> {
         if (ids.length === 0) {
-            await this.expenseItems.manager.query(`DELETE FROM ${tableName}`);
+            await this.expenseItems.manager.query(`DELETE FROM ${tableName} WHERE account_id = $1`, [accountId]);
 
             return;
         }
@@ -165,8 +168,9 @@ export class ExpensesRepository {
                 WHERE NOT (
                     id = ANY($1::uuid[])
                 )
+                  AND account_id = $2::uuid
             `,
-            [ids]
+            [ids, accountId]
         );
     }
 
@@ -195,6 +199,7 @@ export class ExpensesRepository {
             options.expenseItemId,
             options.includeUnposted,
             options.search,
+            options.accountId,
         ];
 
         const commonQuery = `
@@ -215,6 +220,7 @@ export class ExpensesRepository {
                 agent_type,
                 project_id
             FROM expense_payment_outs
+            WHERE account_id = $7::uuid
 
             UNION ALL
 
@@ -234,6 +240,7 @@ export class ExpensesRepository {
                 agent_type,
                 project_id
             FROM expense_cash_outs
+            WHERE account_id = $7::uuid
 
             UNION ALL
 
@@ -253,6 +260,7 @@ export class ExpensesRepository {
                 NULL::text AS agent_type,
                 project_id
             FROM expense_losses
+            WHERE account_id = $7::uuid
         ),
 
         filtered_expenses AS (
@@ -288,6 +296,7 @@ export class ExpensesRepository {
             LEFT JOIN expense_items AS item
                 ON item.id =
                    expense.expense_item_id
+               AND item.account_id = $7::uuid
 
             WHERE expense.moment >= $1::date
               AND expense.moment <
@@ -354,14 +363,34 @@ export class ExpensesRepository {
 
             project_id::text AS "projectId"
 
+            , CASE WHEN payment_type = 'loss' THEN COALESCE((
+                SELECT jsonb_agg(
+                    jsonb_build_object(
+                        'id', position.id::text,
+                        'assortmentId', position.assortment_id::text,
+                        'assortmentType', position.assortment_type,
+                        'name', COALESCE(inventory.name, 'Товар ' || COALESCE(position.assortment_id::text, 'не указан')),
+                        'quantity', position.quantity::text,
+                        'priceMinor', position.price_minor::text,
+                        'totalMinor', position.total_minor::text
+                    ) ORDER BY COALESCE(inventory.name, ''), position.id
+                )
+                FROM expense_loss_positions position
+                LEFT JOIN moysklad_inventory_products inventory
+                  ON inventory.account_id = $7::uuid
+                 AND inventory.id = position.assortment_id
+                WHERE position.account_id = $7::uuid
+                  AND position.loss_id = filtered_expenses.id
+            ), '[]'::jsonb) ELSE '[]'::jsonb END AS positions
+
         FROM filtered_expenses
 
         ORDER BY
             ${sortColumn} ${sortDirection},
             id ASC
 
-        LIMIT $7
-        OFFSET $8
+        LIMIT $8
+        OFFSET $9
     `;
 
         const summaryQuery = `

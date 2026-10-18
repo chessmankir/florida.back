@@ -17,11 +17,11 @@ export interface LinkedInventoryBundle {
 export class FlowwowProductLinksRepository {
     public constructor(@InjectDataSource('florida') private readonly database: DataSource) {}
 
-    public async replace(shopId: number, productId: number, bundleId: string): Promise<void> {
+    public async replace(accountId: string, shopId: number, productId: number, bundleId: string): Promise<void> {
         await this.database.transaction(async (manager) => {
-            await manager.delete(FlowwowProductInventoryLink, { shopId, flowwowProductId: productId });
+            await manager.delete(FlowwowProductInventoryLink, { accountId, shopId, flowwowProductId: productId });
             await manager.insert(FlowwowProductInventoryLink, {
-                shopId,
+                accountId, shopId,
                 flowwowProductId: productId,
                 bundleId,
                 quantity: 1,
@@ -29,42 +29,44 @@ export class FlowwowProductLinksRepository {
         });
     }
 
-    public async remove(shopId: number, productId: number): Promise<void> {
+    public async remove(accountId: string, shopId: number, productId: number): Promise<void> {
         await this.database.getRepository(FlowwowProductInventoryLink).delete({
-            shopId,
+            accountId, shopId,
             flowwowProductId: productId,
         });
     }
 
-    public async existsInInventory(bundleId: string): Promise<boolean> {
+    public async existsInInventory(accountId: string, bundleId: string): Promise<boolean> {
         const rows = await this.database.query<Array<{ exists: boolean }>>(
             `SELECT EXISTS(
-                SELECT 1 FROM moysklad_inventory_products
-                WHERE id = $1 AND product_type = 'bundle'
+                SELECT 1 FROM moysklad_processing_plans
+                WHERE id = $1 AND account_id = $2 AND archived = false
             ) AS "exists"`,
-            [bundleId]
+            [bundleId, accountId]
         );
         return rows[0]?.exists === true;
     }
 
-    public async find(shopId: number, productId: number): Promise<LinkedInventoryBundle | null> {
+    public async find(accountId: string, shopId: number, productId: number): Promise<LinkedInventoryBundle | null> {
         const rows = await this.database.query<LinkedInventoryBundle[]>(
             `
                 SELECT
-                    inventory.id,
-                    inventory.product_type AS "productType",
-                    inventory.name,
-                    inventory.buy_price_minor::text AS "buyPriceMinor",
-                    inventory.sale_price_minor::text AS "salePriceMinor",
-                    inventory.stock_cost_minor::text AS "stockCostMinor"
+                    plan.id,
+                    'processingplan'::text AS "productType",
+                    plan.name,
+                    plan.production_cost_minor::text AS "buyPriceMinor",
+                    NULL::text AS "salePriceMinor",
+                    plan.production_cost_minor::text AS "stockCostMinor"
                 FROM flowwow_product_inventory_links link
-                INNER JOIN moysklad_inventory_products inventory
-                    ON inventory.id = link.moysklad_product_id
+                INNER JOIN moysklad_processing_plans plan
+                    ON plan.id = link.moysklad_product_id
+                   AND plan.account_id = link.account_id
                 WHERE link.shop_id = $1
                   AND link.flowwow_product_id = $2
+                  AND link.account_id = $3
                 LIMIT 1
             `,
-            [shopId, productId]
+            [shopId, productId, accountId]
         );
         return rows[0] ?? null;
     }

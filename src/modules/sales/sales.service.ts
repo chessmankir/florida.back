@@ -12,15 +12,15 @@ export class SalesService {
         private readonly customerOrderSync: SalesCustomerOrderSyncService
     ) {}
 
-    public syncAll(): Promise<number> {
-        return this.customerOrderSync.syncAll();
+    public syncAll(accountId: string, token: string): Promise<number> {
+        return this.customerOrderSync.syncAll(accountId, token);
     }
 
-    public findOne(id: string): Promise<SalesCustomerOrder | null> {
-        return this.repository.findOne(id);
+    public findOne(accountId: string, id: string): Promise<SalesCustomerOrder | null> {
+        return this.repository.findOne(accountId, id);
     }
 
-    public findPositions(orderId: string): Promise<SalesCustomerOrderPosition[]> {
-        return this.repository.findPositions(orderId);
+    public findPositions(accountId: string, orderId: string): Promise<SalesCustomerOrderPosition[]> {
+        return this.repository.findPositions(accountId, orderId);
     }
 }

@@ -1,5 +1,4 @@
 import { BadGatewayException, Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import axios, { type AxiosInstance } from 'axios';
 import { setTimeout as sleep } from 'node:timers/promises';
 
@@ -10,13 +9,12 @@ export class CustomerOrderClient {
     private readonly logger = new Logger(CustomerOrderClient.name);
     private readonly http: AxiosInstance;
 
-    constructor(config: ConfigService) {
+    constructor() {
         this.http = axios.create({
             baseURL: 'https://api.moysklad.ru/api/remap/1.2',
             timeout: 30_000,
             maxRedirects: 0,
             headers: {
-                Authorization: 'Bearer ' + config.getOrThrow<string>('MOYSKLAD').trim(),
                 'Accept-Encoding': 'gzip',
                 Accept: 'application/json;charset=utf-8',
                 'Content-Type': 'application/json;charset=utf-8',
@@ -24,14 +22,14 @@ export class CustomerOrderClient {
         });
     }
 
-    public getOrders(request: PageRequest = {}): Promise<RemotePage<CustomerOrder>> {
-        return this.getPage('/entity/customerorder', this.pageParams(request, 100), {
+    public getOrders(token: string, request: PageRequest = {}): Promise<RemotePage<CustomerOrder>> {
+        return this.getPage(token, '/entity/customerorder', this.pageParams(request, 100), {
             expand: 'positions',
         });
     }
 
-    public getPositions(orderId: string, request: PageRequest = {}): Promise<RemotePage<CustomerOrderPosition>> {
-        return this.getPage('/entity/customerorder/' + encodeURIComponent(orderId) + '/positions', this.pageParams(request, 1000));
+    public getPositions(token: string, orderId: string, request: PageRequest = {}): Promise<RemotePage<CustomerOrderPosition>> {
+        return this.getPage(token, '/entity/customerorder/' + encodeURIComponent(orderId) + '/positions', this.pageParams(request, 1000));
     }
 
     private pageParams(request: PageRequest, maximum: number): Required<PageRequest> {
@@ -45,10 +43,11 @@ export class CustomerOrderClient {
         return { limit: Math.min(Math.max(limit, 1), maximum), offset };
     }
 
-    private async getPage<T>(path: string, request: Required<PageRequest>, params: Record<string, string> = {}): Promise<RemotePage<T>> {
+    private async getPage<T>(token: string, path: string, request: Required<PageRequest>, params: Record<string, string> = {}): Promise<RemotePage<T>> {
         for (let attempt = 0; ; attempt++) {
             try {
                 const { data } = await this.http.get<RemotePage<T>>(path, {
+                    headers: { Authorization: `Bearer ${token}` },
                     params: {
                         ...request,
                         ...params,

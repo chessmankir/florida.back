@@ -19,11 +19,11 @@ export class ExpensesService {
         private readonly repository: ExpensesRepository
     ) {}
 
-    public syncAll(): Promise<ExpensesSyncResult> {
-        return this.synchronization.syncAll();
+    public syncAll(accountId: string, token: string): Promise<ExpensesSyncResult> {
+        return this.synchronization.syncAll(accountId, token);
     }
 
-    public getAnalytics(query: {
+    public getAnalytics(accountId: string, query: {
         dateFrom?: string;
         dateTo?: string;
         paymentType?: string;
@@ -88,6 +88,7 @@ export class ExpensesService {
         }
 
         const options: ExpenseAnalyticsOptions = {
+            accountId,
             dateFrom,
             dateTo,
 

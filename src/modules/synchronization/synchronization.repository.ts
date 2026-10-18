@@ -13,7 +13,7 @@ export class SynchronizationRepository {
         private readonly runs: Repository<SynchronizationRun>
     ) {}
 
-    public async withLock(scope: SyncScope, work: () => Promise<SyncResult>): Promise<SyncResult | null> {
+    public async withLock(accountId: string, scope: SyncScope, work: () => Promise<SyncResult>): Promise<SyncResult | null> {
         const runner = this.database.createQueryRunner();
         let locked = false;
         const runId = randomUUID();
@@ -23,9 +23,13 @@ export class SynchronizationRepository {
             locked = rows[0].locked;
             if (!locked) return null;
             // Acquiring the lock proves no previous compliant worker still owns a run.
-            await runner.query("UPDATE synchronization_runs SET status = 'interrupted', finished_at = now() WHERE status = 'running'");
+            await runner.query(
+                "UPDATE synchronization_runs SET status = 'interrupted', finished_at = now() WHERE status = 'running' AND account_id = $1",
+                [accountId]
+            );
             await this.runs.insert({
                 id: runId,
+                accountId,
                 scope,
                 status: 'running',
                 finishedAt: null,

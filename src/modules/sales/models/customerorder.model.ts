@@ -1,7 +1,8 @@
+import { AccountOwnedEntity } from '../../auth/models/account-owned.model.js';
 import { Column, Entity, PrimaryColumn } from 'typeorm';
 
 @Entity('sales_customer_orders')
-export class SalesCustomerOrder {
+export class SalesCustomerOrder extends AccountOwnedEntity {
     @PrimaryColumn('uuid') id: string;
     @Column('text') number: string;
     @Column({ name: 'external_code', type: 'text', nullable: true }) externalCode: string | null;
@@ -30,3 +31,4 @@ export class SalesCustomerOrder {
     @Column({ name: 'raw_json', type: 'jsonb' }) rawJson: unknown;
     @Column({ name: 'synced_at', type: 'timestamptz' }) syncedAt: Date;
 }
+

@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { AuthModule } from '../auth/auth.module.js';
 
 import { ExpensesClient } from './clients/expenses.client.js';
 import { CashOut } from './models/cash-out.model.js';
@@ -13,7 +14,7 @@ import { ExpenseLossPosition } from './models/loss-position.model.js';
 import { ExpenseLoss } from './models/loss.model.js';
 
 @Module({
-    imports: [TypeOrmModule.forFeature([ExpenseItem, PaymentOut, CashOut, ExpenseLoss, ExpenseLossPosition], 'florida')],
+    imports: [AuthModule, TypeOrmModule.forFeature([ExpenseItem, PaymentOut, CashOut, ExpenseLoss, ExpenseLossPosition], 'florida')],
     controllers: [ExpensesController],
     providers: [ExpensesClient, ExpensesRepository, ExpensesSyncService, ExpensesService],
     exports: [ExpensesService, ExpensesRepository],

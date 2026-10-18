@@ -19,16 +19,16 @@ export class MoyskladInventoryRepository {
         private readonly products: Repository<MoyskladInventoryProduct>
     ) {}
 
-    public async saveAll(rows: MoyskladInventorySnapshot[]): Promise<number> {
+    public async saveAll(accountId: string, rows: MoyskladInventorySnapshot[]): Promise<number> {
         const chunkSize = 500;
         for (let offset = 0; offset < rows.length; offset += chunkSize) {
-            await this.products.upsert(rows.slice(offset, offset + chunkSize), ['id']);
+            await this.products.upsert(rows.slice(offset, offset + chunkSize).map((row) => ({ ...row, accountId })), ['id']);
         }
         return rows.length;
     }
 
     public async replaceBundleComponents(
-        bundleIds: string[],
+        accountId: string, bundleIds: string[],
         components: MoyskladBundleComponentSnapshot[]
     ): Promise<number> {
         if (bundleIds.length === 0) return 0;
@@ -38,17 +38,18 @@ export class MoyskladInventoryRepository {
                 .delete()
                 .from(MoyskladBundleComponent)
                 .where('bundle_id IN (:...bundleIds)', { bundleIds })
+                .andWhere('account_id = :accountId', { accountId })
                 .execute();
             const chunkSize = 500;
             for (let offset = 0; offset < components.length; offset += chunkSize) {
-                await manager.insert(MoyskladBundleComponent, components.slice(offset, offset + chunkSize));
+                await manager.insert(MoyskladBundleComponent, components.slice(offset, offset + chunkSize).map((row) => ({ ...row, accountId })));
             }
         });
         return components.length;
     }
 
-    public async findBundleComponents(bundleId: string): Promise<MoyskladBundleComponentsResponse | null> {
-        const bundle = await this.products.findOne({ where: { id: bundleId }, select: { id: true, name: true, productType: true } });
+    public async findBundleComponents(accountId: string, bundleId: string): Promise<MoyskladBundleComponentsResponse | null> {
+        const bundle = await this.products.findOne({ where: { accountId, id: bundleId }, select: { id: true, name: true, productType: true } });
         if (!bundle || bundle.productType !== 'bundle') return null;
         const items = await this.products.manager.query<MoyskladBundleComponentItem[]>(
             `
@@ -70,10 +71,12 @@ export class MoyskladInventoryRepository {
                 FROM moysklad_bundle_components component
                 INNER JOIN moysklad_inventory_products inventory
                     ON inventory.id = component.assortment_id
+                   AND inventory.account_id = component.account_id
                 WHERE component.bundle_id = $1
+                  AND component.account_id = $2
                 ORDER BY inventory.name ASC, component.component_id ASC
             `,
-            [bundleId]
+            [bundleId, accountId]
         );
         const totalCostMinor = items.reduce(
             (total, item) => total + Number(item.totalCostMinor ?? 0),
@@ -89,6 +92,7 @@ export class MoyskladInventoryRepository {
 
     public async findPage(options: MoyskladInventoryListOptions): Promise<MoyskladInventoryListResponse> {
         const query = this.products.createQueryBuilder('product');
+        query.where('product.accountId = :accountId', { accountId: options.accountId });
         if (options.search !== null) {
             query.andWhere(
                 '(product.name ILIKE :search OR product.code ILIKE :search OR product.article ILIKE :search)',

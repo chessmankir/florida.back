@@ -21,20 +21,20 @@ export class SalesCustomerOrderSyncService {
         this.pageSize = config.get<number>('MOYSKLAD_SYNC_PAGE_SIZE', 100);
     }
 
-    public async syncAll(): Promise<number> {
+    public async syncAll(accountId: string, token: string): Promise<number> {
         let offset = 0;
 
         while (true) {
-            const page = await this.client.getOrders({ limit: this.pageSize, offset });
+            const page = await this.client.getOrders(token, { limit: this.pageSize, offset });
             const snapshots: SalesOrderSnapshot[] = [];
             const syncedAt = new Date();
 
             for (const order of page.rows) {
-                const positions = await this.loadPositions(order);
+                const positions = await this.loadPositions(token, order);
                 snapshots.push(this.mapper.mapSnapshot(order, positions, syncedAt));
             }
 
-            await this.repository.saveChunk(snapshots);
+            await this.repository.saveChunk(accountId, snapshots);
             offset += page.rows.length;
             this.logger.log({ event: 'customerorder_chunk_saved', saved: offset, total: page.meta.size });
 
@@ -42,7 +42,7 @@ export class SalesCustomerOrderSyncService {
         }
     }
 
-    private async loadPositions(order: CustomerOrder): Promise<CustomerOrderPosition[]> {
+    private async loadPositions(token: string, order: CustomerOrder): Promise<CustomerOrderPosition[]> {
         const expected = order.positions?.meta.size;
 
         if (!Number.isInteger(expected) || expected < 0) {
@@ -59,7 +59,7 @@ export class SalesCustomerOrderSyncService {
         let offset = 0;
 
         while (true) {
-            const page = await this.client.getPositions(order.id, { limit: 1000, offset });
+            const page = await this.client.getPositions(token, order.id, { limit: 1000, offset });
             positions.push(...page.rows);
             offset += page.rows.length;
 

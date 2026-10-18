@@ -1,8 +1,9 @@
+import { AccountOwnedEntity } from '../../auth/models/account-owned.model.js';
 import { Column, CreateDateColumn, Entity, Index, PrimaryColumn } from 'typeorm';
 
 @Entity('synchronization_runs')
 @Index('synchronization_runs_started_idx', ['startedAt'])
-export class SynchronizationRun {
+export class SynchronizationRun extends AccountOwnedEntity {
     @PrimaryColumn({ type: 'uuid' })
     id!: string;
 
@@ -24,3 +25,4 @@ export class SynchronizationRun {
     @Column({ type: 'jsonb', default: () => "'[]'::jsonb" })
     errors!: string[];
 }
+

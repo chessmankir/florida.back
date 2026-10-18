@@ -1,10 +1,11 @@
+import { AccountOwnedEntity } from '../../auth/models/account-owned.model.js';
 import { Column, Entity, Index, PrimaryColumn } from 'typeorm';
 
 @Entity('expense_losses')
 @Index('idx_expense_losses_moment', ['moment'])
 @Index('idx_expense_losses_store', ['storeId'])
 @Index('idx_expense_losses_organization', ['organizationId'])
-export class ExpenseLoss {
+export class ExpenseLoss extends AccountOwnedEntity {
     @PrimaryColumn({
         type: 'uuid',
     })
@@ -119,3 +120,4 @@ export class ExpenseLoss {
     })
     syncedAt!: Date;
 }
+

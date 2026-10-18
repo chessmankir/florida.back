@@ -1,10 +1,11 @@
+import { AccountOwnedEntity } from '../../../auth/models/account-owned.model.js';
 import { Column, Entity, Index, PrimaryColumn } from 'typeorm';
 
 import type { FlowwowShopStatus } from '../types/flowwow-orders.types.js';
 
 @Entity('flowwow_shops')
 @Index('ix_flowwow_shops_status', ['status'])
-export class FlowwowShop {
+export class FlowwowShop extends AccountOwnedEntity {
     @PrimaryColumn({ name: 'shop_id', type: 'integer' }) shopId: number;
     @Column({ type: 'text' }) name: string;
     @Column({ type: 'varchar', length: 16 }) status: FlowwowShopStatus;
@@ -15,3 +16,4 @@ export class FlowwowShop {
     @Column({ name: 'raw_json', type: 'jsonb' }) rawJson: unknown;
     @Column({ name: 'synced_at', type: 'timestamptz' }) syncedAt: Date;
 }
+

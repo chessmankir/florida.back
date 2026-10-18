@@ -21,15 +21,15 @@ export class FlowwowShopsService {
         private readonly repository: FlowwowShopsRepository
     ) {}
 
-    public async syncAll(): Promise<FlowwowShopsSyncResult> {
+    public async syncAll(accountId: string, token: string): Promise<FlowwowShopsSyncResult> {
         let saved = 0;
 
         for (const status of FLOWWOW_SHOP_STATUSES) {
             let received = 0;
             for (let page = 0; ; page++) {
-                const response = await this.client.getShops({ status, page, limit: this.pageSize });
+                const response = await this.client.getShops(token, { status, page, limit: this.pageSize });
                 const syncedAt = new Date();
-                await this.repository.saveChunk(response.shops.map((shop) => this.mapper.mapSnapshot(shop, syncedAt)));
+                await this.repository.saveChunk(accountId, response.shops.map((shop) => this.mapper.mapSnapshot(shop, syncedAt)));
                 received += response.shops.length;
                 saved += response.shops.length;
                 this.logger.log({ event: 'flowwow_shops_chunk_saved', status, received, total: response.total });
@@ -37,10 +37,10 @@ export class FlowwowShopsService {
             }
         }
 
-        return { saved, activeShopIds: await this.repository.findActiveShopIds() };
+        return { saved, activeShopIds: await this.repository.findActiveShopIds(accountId) };
     }
 
-    public findActiveShops(): Promise<Array<{ shopId: number; name: string; address: string | null }>> {
-        return this.repository.findActiveShops();
+    public findActiveShops(accountId: string): Promise<Array<{ shopId: number; name: string; address: string | null }>> {
+        return this.repository.findActiveShops(accountId);
     }
 }

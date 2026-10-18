@@ -1,5 +1,4 @@
 import { BadGatewayException, Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import axios, { AxiosInstance } from 'axios';
 import { setTimeout as sleep } from 'node:timers/promises';
 import type { MoyskladAssortmentRow, MoyskladBundleComponentRow, MoyskladPage, MoyskladStockRow } from '../types/moysklad-inventory.types.js';
@@ -11,31 +10,32 @@ export class MoyskladInventoryClient {
     private readonly logger = new Logger(MoyskladInventoryClient.name);
     private readonly http: AxiosInstance;
 
-    public constructor(config: ConfigService) {
+    public constructor() {
         this.http = axios.create({
             baseURL: 'https://api.moysklad.ru/api/remap/1.2',
             timeout: 60_000,
             headers: {
-                Authorization: `Bearer ${config.getOrThrow<string>('MOYSKLAD')}`,
                 Accept: 'application/json;charset=utf-8',
                 'Content-Type': 'application/json',
             },
         });
     }
 
-    public getAssortmentPage(limit: number, offset: number): Promise<MoyskladPage<MoyskladAssortmentRow>> {
-        return this.getPage('/entity/assortment', limit, offset);
+    public getAssortmentPage(token: string, limit: number, offset: number): Promise<MoyskladPage<MoyskladAssortmentRow>> {
+        return this.getPage(token, '/entity/assortment', limit, offset);
     }
-    public getStockPage(limit: number, offset: number): Promise<MoyskladPage<MoyskladStockRow>> {
-        return this.getPage('/report/stock/all', limit, offset);
+    public getStockPage(token: string, limit: number, offset: number): Promise<MoyskladPage<MoyskladStockRow>> {
+        return this.getPage(token, '/report/stock/all', limit, offset);
     }
-    public getBundleComponentsPage(bundleId: string, limit: number, offset: number): Promise<MoyskladPage<MoyskladBundleComponentRow>> {
-        return this.getPage(`/entity/bundle/${bundleId}/components`, limit, offset);
+    public getBundleComponentsPage(token: string, bundleId: string, limit: number, offset: number): Promise<MoyskladPage<MoyskladBundleComponentRow>> {
+        return this.getPage(token, `/entity/bundle/${bundleId}/components`, limit, offset);
     }
-    private async getPage<T>(path: string, limit: number, offset: number): Promise<MoyskladPage<T>> {
+    private async getPage<T>(token: string, path: string, limit: number, offset: number): Promise<MoyskladPage<T>> {
         for (let attempt = 0; ; attempt++) {
             try {
-                const response = await this.http.get<MoyskladPage<T>>(path, { params: { limit, offset } });
+                const response = await this.http.get<MoyskladPage<T>>(path, {
+                    params: { limit, offset }, headers: { Authorization: `Bearer ${token}` },
+                });
                 if (!response.data || !Array.isArray(response.data.rows) || !Number.isInteger(response.data.meta?.size)) {
                     throw new BadGatewayException(`МойСклад вернул некорректные данные ${path}`);
                 }

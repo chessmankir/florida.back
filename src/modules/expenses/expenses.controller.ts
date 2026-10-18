@@ -1,15 +1,18 @@
-import { Controller, Get, Query } from '@nestjs/common';
+import { Controller, Get, Headers, Query } from '@nestjs/common';
 
 import { ExpensesService } from './expenses.service.js';
 
 import type { ExpenseAnalyticsResponse } from './types/expenses.types.js';
+import { AccountAccessService } from '../auth/account-access.service.js';
 
 @Controller('analytics/expenses')
 export class ExpensesController {
-    public constructor(private readonly expenses: ExpensesService) {}
+    public constructor(private readonly expenses: ExpensesService, private readonly accounts: AccountAccessService) {}
 
     @Get()
     public getAnalytics(
+        @Headers('x-account-id') accountIdValue: string | undefined,
+        @Headers('authorization') authorization: string | undefined,
         @Query('dateFrom')
         dateFrom?: string,
 
@@ -40,7 +43,7 @@ export class ExpensesController {
         @Query('limit')
         limit?: string
     ): Promise<ExpenseAnalyticsResponse> {
-        return this.expenses.getAnalytics({
+        return this.expenses.getAnalytics(this.accounts.authorize(accountIdValue, authorization), {
             dateFrom,
             dateTo,
             paymentType,

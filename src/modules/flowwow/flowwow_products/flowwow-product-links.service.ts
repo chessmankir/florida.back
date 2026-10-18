@@ -6,35 +6,36 @@ import { FlowwowProductLinksRepository, type LinkedInventoryBundle } from './flo
 export class FlowwowProductLinksService {
     public constructor(private readonly repository: FlowwowProductLinksRepository) {}
 
-    public get(shopIdValue: string | undefined, productIdValue: string | undefined): Promise<LinkedInventoryBundle | null> {
+    public get(accountId: string, shopIdValue: string | undefined, productIdValue: string | undefined): Promise<LinkedInventoryBundle | null> {
         return this.repository.find(
+            accountId,
             this.positiveInteger(shopIdValue, 'shopId'),
             this.positiveInteger(productIdValue, 'productId')
         );
     }
 
-    public async save(body: unknown): Promise<{ shopId: number; productId: number; bundle: LinkedInventoryBundle }> {
+    public async save(accountId: string, body: unknown): Promise<{ shopId: number; productId: number; bundle: LinkedInventoryBundle }> {
         if (!body || typeof body !== 'object') throw new BadRequestException('Передайте JSON-тело');
         const source = body as Record<string, unknown>;
         const shopId = this.positiveInteger(String(source.shopId ?? ''), 'shopId');
         const productId = this.positiveInteger(String(source.productId ?? ''), 'productId');
-        const bundleId = String(source.bundleId ?? '');
+        const bundleId = String(source.processingPlanId ?? source.bundleId ?? '');
         if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(bundleId)) {
-            throw new BadRequestException('bundleId должен быть корректным UUID');
+            throw new BadRequestException('processingPlanId должен быть корректным UUID');
         }
-        if (!(await this.repository.existsInInventory(bundleId))) {
-            throw new BadRequestException('Товар с таким bundleId не найден в каталоге МойСклад');
+        if (!(await this.repository.existsInInventory(accountId, bundleId))) {
+            throw new BadRequestException('Техкарта с таким processingPlanId не найдена');
         }
-        await this.repository.replace(shopId, productId, bundleId);
-        const bundle = await this.repository.find(shopId, productId);
-        if (!bundle) throw new BadRequestException('Не удалось сохранить связь с букетом');
+        await this.repository.replace(accountId, shopId, productId, bundleId);
+        const bundle = await this.repository.find(accountId, shopId, productId);
+        if (!bundle) throw new BadRequestException('Не удалось сохранить связь с техкартой');
         return { shopId, productId, bundle };
     }
 
-    public async remove(shopIdValue: string | undefined, productIdValue: string | undefined): Promise<{ shopId: number; productId: number; bundleId: null }> {
+    public async remove(accountId: string, shopIdValue: string | undefined, productIdValue: string | undefined): Promise<{ shopId: number; productId: number; bundleId: null }> {
         const shopId = this.positiveInteger(shopIdValue, 'shopId');
         const productId = this.positiveInteger(productIdValue, 'productId');
-        await this.repository.remove(shopId, productId);
+        await this.repository.remove(accountId, shopId, productId);
         return { shopId, productId, bundleId: null };
     }
 

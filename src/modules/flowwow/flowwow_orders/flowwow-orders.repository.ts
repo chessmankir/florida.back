@@ -18,11 +18,11 @@ export class FlowwowOrdersRepository {
 
     public constructor(@InjectDataSource('florida') private readonly database: DataSource) {}
 
-    public async saveChunk(snapshots: FlowwowOrderSnapshot[]): Promise<void> {
+    public async saveChunk(accountId: string, snapshots: FlowwowOrderSnapshot[]): Promise<void> {
         if (snapshots.length === 0) return;
 
         await this.database.transaction(async (manager) => {
-            const orders = snapshots.map((snapshot) => snapshot.order);
+            const orders = snapshots.map((snapshot) => ({ ...snapshot.order, accountId }));
             for (let offset = 0; offset < orders.length; offset += this.batchSize) {
                 await manager
                     .createQueryBuilder()
@@ -31,6 +31,7 @@ export class FlowwowOrdersRepository {
                     .values(orders.slice(offset, offset + this.batchSize))
                     .orUpdate(
                         [
+                            'account_id',
                             'status',
                             'delivery_type',
                             'delivery_time_type',
@@ -48,25 +49,32 @@ export class FlowwowOrdersRepository {
             }
 
             for (const snapshot of snapshots) {
+                await manager.query(
+                    `UPDATE flowwow_order_positions
+                     SET account_id = $1
+                     WHERE account_id IS NULL AND shop_id = $2 AND order_id = $3`,
+                    [accountId, snapshot.order.shopId, snapshot.order.orderId]
+                );
                 await manager.delete(FlowwowOrderPosition, {
+                    accountId,
                     shopId: snapshot.order.shopId,
                     orderId: snapshot.order.orderId,
                 });
             }
 
-            const positions = snapshots.flatMap((snapshot) => snapshot.positions);
+            const positions = snapshots.flatMap((snapshot) => snapshot.positions.map((position) => ({ ...position, accountId })));
             for (let offset = 0; offset < positions.length; offset += this.batchSize) {
                 await manager.insert(FlowwowOrderPosition, positions.slice(offset, offset + this.batchSize));
             }
         });
     }
 
-    public findOne(shopId: number, orderId: number): Promise<FlowwowOrder | null> {
-        return this.database.getRepository(FlowwowOrder).findOneBy({ shopId, orderId });
+    public findOne(accountId: string, shopId: number, orderId: number): Promise<FlowwowOrder | null> {
+        return this.database.getRepository(FlowwowOrder).findOneBy({ accountId, shopId, orderId });
     }
 
     public async updateFinanceAmounts(
-        shopId: number,
+        accountId: string, shopId: number,
         rows: FlowwowOrderFinanceAmounts[]
     ): Promise<{ updatedOrders: number; missingOrderIds: number[] }> {
         if (rows.length === 0) return { updatedOrders: 0, missingOrderIds: [] };
@@ -76,6 +84,7 @@ export class FlowwowOrdersRepository {
             .createQueryBuilder('order')
             .select('order.orderId', 'orderId')
             .where('order.shopId = :shopId', { shopId })
+            .andWhere('order.accountId = :accountId', { accountId })
             .andWhere('order.orderId IN (:...orderIds)', { orderIds: rows.map((row) => row.orderId) })
             .getRawMany<{ orderId: number | string }>();
         const existingIds = new Set(existing.map((row) => Number(row.orderId)));
@@ -85,7 +94,7 @@ export class FlowwowOrdersRepository {
             for (const row of matched) {
                 await manager.update(
                     FlowwowOrder,
-                    { shopId, orderId: row.orderId },
+                    { accountId, shopId, orderId: row.orderId },
                     {
                         customerPaidAmount: row.customerPaidAmount,
                         bonusAmount: row.bonusAmount,
@@ -102,12 +111,13 @@ export class FlowwowOrdersRepository {
         };
     }
 
-    public async findOrders(options: FlowwowOrdersListOptions): Promise<FlowwowOrdersListResponse> {
-        const parameters = [options.dateFrom, options.dateTo, options.shopId];
+    public async findOrders(accountId: string, options: FlowwowOrdersListOptions): Promise<FlowwowOrdersListResponse> {
+        const parameters = [options.dateFrom, options.dateTo, options.shopId, accountId];
         const where = `
             o.created_at_source >= ($1::date::timestamp AT TIME ZONE 'Europe/Moscow')
             AND o.created_at_source < (($2::date + 1)::timestamp AT TIME ZONE 'Europe/Moscow')
             AND ($3::integer IS NULL OR o.shop_id = $3)
+            AND o.account_id = $4::uuid
         `;
 
         const summaryRows = await this.database.query<Array<{
@@ -151,15 +161,18 @@ export class FlowwowOrdersRepository {
                     LEFT JOIN flowwow_product_inventory_links link
                         ON link.shop_id = p.shop_id
                        AND link.flowwow_product_id = p.product_id
+                       AND link.account_id = p.account_id
                     LEFT JOIN LATERAL (
                         SELECT SUM(
                             component.quantity
                             * COALESCE(inventory.stock_cost_minor, inventory.buy_price_minor)
                         ) AS bundle_cost_minor
-                        FROM moysklad_bundle_components component
+                        FROM moysklad_processing_plan_materials component
                         INNER JOIN moysklad_inventory_products inventory
                             ON inventory.id = component.assortment_id
-                        WHERE component.bundle_id = link.moysklad_product_id
+                           AND inventory.account_id = component.account_id
+                        WHERE component.processing_plan_id = link.moysklad_product_id
+                          AND component.account_id = link.account_id
                     ) bundle_cost ON true
                 )
                 SELECT
@@ -209,13 +222,13 @@ export class FlowwowOrdersRepository {
                         '[]'::json
                     ) AS positions
                 FROM flowwow_orders o
-                LEFT JOIN flowwow_shops s ON s.shop_id = o.shop_id
+                LEFT JOIN flowwow_shops s ON s.shop_id = o.shop_id AND s.account_id = o.account_id
                 LEFT JOIN enriched_positions p
-                    ON p.shop_id = o.shop_id AND p.order_id = o.order_id
+                    ON p.shop_id = o.shop_id AND p.order_id = o.order_id AND p.account_id = o.account_id
                 WHERE ${where}
                 GROUP BY o.shop_id, o.order_id, s.name, s.address
                 ORDER BY o.created_at_source DESC, o.order_id DESC
-                LIMIT $4 OFFSET $5
+                LIMIT $5 OFFSET $6
             `,
             [...parameters, options.limit, offset]
         );

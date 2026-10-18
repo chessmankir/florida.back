@@ -6,7 +6,9 @@ import { ExpensesService } from '../expenses/expenses.service.js';
 import { FlowwowOrdersService } from '../flowwow/flowwow_orders/flowwow-orders.service.js';
 import { FlowwowProductsService } from '../flowwow/flowwow_products/flowwow-products.service.js';
 import { MoyskladInventoryService } from '../moysklad_inventory/moysklad-inventory.service.js';
+import { MoyskladProcessingPlansService } from '../moysklad_processing_plans/moysklad-processing-plans.service.js';
 import { SyncResult, SyncScope } from './types/synchronization.types.js';
+import { AccountAccessService } from '../auth/account-access.service.js';
 
 
 @Injectable()
@@ -22,10 +24,12 @@ export class SynchronizationService {
         private readonly expenses: ExpensesService,
         private readonly flowwowOrders: FlowwowOrdersService,
         private readonly flowwowProducts: FlowwowProductsService,
-        private readonly moyskladInventory: MoyskladInventoryService
+        private readonly moyskladInventory: MoyskladInventoryService,
+        private readonly moyskladProcessingPlans: MoyskladProcessingPlansService,
+        private readonly accounts: AccountAccessService
     ) {}
 
-    public async run(scope: SyncScope = 'all'): Promise<SyncResult | null> {
+    public async run(accountId: string, scope: SyncScope = 'all'): Promise<SyncResult | null> {
         if (this.running) {
             return null;
         }
@@ -33,38 +37,43 @@ export class SynchronizationService {
         this.running = true;
 
         try {
-            return await this.repository.withLock(scope, () => this.synchronize(scope));
+            return await this.repository.withLock(accountId, scope, () => this.synchronize(accountId, scope));
         } finally {
             this.running = false;
         }
     }
 
-    private async synchronize(scope: SyncScope): Promise<SyncResult> {
+    private async synchronize(accountId: string, scope: SyncScope): Promise<SyncResult> {
         const startedAt = new Date();
         const counts: Record<string, number> = {};
         const errors: string[] = [];
 
-         /*if (scope === 'all' || scope === 'sales') {
-            await this.synchronizeSales(counts, errors);
+      /*  if (scope === 'all' || scope === 'sales') {
+            await this.synchronizeSales(accountId, counts, errors);
+        }
+
+        if (scope === 'all' || scope === 'products') {
+            await this.synchronizeProducts(accountId, counts, errors);
+        }
+
+        if (scope === 'all' || scope === 'expenses') {
+            await this.synchronizeExpenses(accountId, counts, errors);
         }*/
 
-         /*  if (scope === 'all' || scope === 'products') {
-            await this.synchronizeProducts(counts, errors);
-        }*/
-       /* if (scope === 'all' || scope === 'expenses') {
-            await this.synchronizeExpenses(counts, errors);
-        }
-*/
-       if (scope === 'all' || scope === 'flowwow_orders') {
-            await this.synchronizeFlowwowOrders(counts, errors);
+        if (scope === 'all' || scope === 'flowwow_orders') {
+            await this.synchronizeFlowwowOrders(accountId, counts, errors);
         }
 
         if (scope === 'all' || scope === 'flowwow_products') {
-            await this.synchronizeFlowwowProducts(counts, errors);
+            await this.synchronizeFlowwowProducts(accountId, counts, errors);
         }
 
         if (scope === 'all' || scope === 'moysklad_inventory') {
-            await this.synchronizeMoyskladInventory(counts, errors);
+            await this.synchronizeMoyskladInventory(accountId, counts, errors);
+        }
+
+        if (scope === 'all' || scope === 'moysklad_processing_plans') {
+            await this.synchronizeMoyskladProcessingPlans(accountId, counts, errors);
         }
 
         return {
@@ -76,9 +85,22 @@ export class SynchronizationService {
         };
     }
 
-    private async synchronizeMoyskladInventory(counts: Record<string, number>, errors: string[]): Promise<void> {
+    private async synchronizeMoyskladProcessingPlans(accountId: string, counts: Record<string, number>, errors: string[]): Promise<void> {
         try {
-            const result = await this.moyskladInventory.syncAll();
+            const result = await this.moyskladProcessingPlans.syncAll(accountId, await this.accounts.moyskladToken(accountId));
+            counts.moysklad_processing_plans = result.plans;
+            counts.moysklad_processing_plan_materials = result.materials;
+            this.logger.log({ event: 'moysklad_processing_plans_synchronization_finished', ...result });
+        } catch (error: unknown) {
+            const cause = error instanceof Error ? error.message : String(error);
+            errors.push(`moysklad_processing_plans: Синхронизация техкарт не завершена. ${cause}`);
+            this.logger.error({ event: 'moysklad_processing_plans_synchronization_failed', cause });
+        }
+    }
+
+    private async synchronizeMoyskladInventory(accountId: string, counts: Record<string, number>, errors: string[]): Promise<void> {
+        try {
+            const result = await this.moyskladInventory.syncAll(accountId, await this.accounts.moyskladToken(accountId));
             counts.moysklad_inventory = result.saved;
             counts.moysklad_bundle_components = result.componentsReceived;
             this.logger.log({ event: 'moysklad_inventory_synchronization_finished', ...result });
@@ -89,9 +111,9 @@ export class SynchronizationService {
         }
     }
 
-    private async synchronizeFlowwowProducts(counts: Record<string, number>, errors: string[]): Promise<void> {
+    private async synchronizeFlowwowProducts(accountId: string, counts: Record<string, number>, errors: string[]): Promise<void> {
         try {
-            const result = await this.flowwowProducts.syncAll();
+            const result = await this.flowwowProducts.syncAll(accountId, await this.accounts.flowwowToken(accountId));
             counts.flowwow_products = result.total;
             this.logger.log({
                 event: 'flowwow_products_synchronization_finished',
@@ -111,9 +133,9 @@ export class SynchronizationService {
         }
     }
 
-    private async synchronizeFlowwowOrders(counts: Record<string, number>, errors: string[]): Promise<void> {
+    private async synchronizeFlowwowOrders(accountId: string, counts: Record<string, number>, errors: string[]): Promise<void> {
         try {
-            const result = await this.flowwowOrders.syncAll();
+            const result = await this.flowwowOrders.syncAll(accountId, await this.accounts.flowwowToken(accountId));
             counts.flowwow_shops = result.shopsSynced;
             counts.flowwow_orders = result.total;
             this.logger.log({
@@ -135,13 +157,13 @@ export class SynchronizationService {
         }
     }
 
-    private async synchronizeExpenses(counts: Record<string, number>, errors: string[]): Promise<void> {
+    private async synchronizeExpenses(accountId: string, counts: Record<string, number>, errors: string[]): Promise<void> {
         try {
             /*
              * Внутри syncAll последовательность:
              * expenseitem → paymentout → cashout.
              */
-            const result = await this.expenses.syncAll();
+            const result = await this.expenses.syncAll(accountId, await this.accounts.moyskladToken(accountId));
 
             counts.expenseitem = result.expenseItems;
 
@@ -176,9 +198,9 @@ export class SynchronizationService {
         }
     }
 
-    private async synchronizeSales(counts: Record<string, number>, errors: string[]): Promise<void> {
+    private async synchronizeSales(accountId: string, counts: Record<string, number>, errors: string[]): Promise<void> {
         try {
-            const savedOrders = await this.sales.syncAll();
+            const savedOrders = await this.sales.syncAll(accountId, await this.accounts.moyskladToken(accountId));
 
             counts.customerorder = savedOrders;
 
@@ -198,11 +220,11 @@ export class SynchronizationService {
         }
     }
 
-    private async synchronizeProducts(counts: Record<string, number>, errors: string[]): Promise<void> {
+    private async synchronizeProducts(accountId: string, counts: Record<string, number>, errors: string[]): Promise<void> {
         try {
             const periodFrom = '2026-01-01';
 
-            const results = await this.products.syncFromDateToToday(periodFrom);
+            const results = await this.products.syncFromDateToToday(accountId, await this.accounts.moyskladToken(accountId), periodFrom);
 
             const received = results.reduce((total, result) => total + result.received, 0);
 

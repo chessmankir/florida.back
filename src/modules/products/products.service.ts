@@ -18,29 +18,29 @@ export class ProductsService {
         private readonly repository: ProductsRepository
     ) {}
 
-    public syncPreviousDay(): Promise<ProductProfitSyncResult> {
-        return this.profitSync.syncPreviousDay();
+    public syncPreviousDay(accountId: string, token: string): Promise<ProductProfitSyncResult> {
+        return this.profitSync.syncPreviousDay(accountId, token);
     }
 
-    public syncDay(day: string): Promise<ProductProfitSyncResult> {
-        return this.profitSync.syncDay(day);
+    public syncDay(accountId: string, token: string, day: string): Promise<ProductProfitSyncResult> {
+        return this.profitSync.syncDay(accountId, token, day);
     }
 
-    public syncRange(dateFrom: string, dateTo: string): Promise<ProductProfitSyncResult[]> {
-        return this.profitSync.syncRange(dateFrom, dateTo);
+    public syncRange(accountId: string, token: string, dateFrom: string, dateTo: string): Promise<ProductProfitSyncResult[]> {
+        return this.profitSync.syncRange(accountId, token, dateFrom, dateTo);
     }
 
-    public syncFromDateToToday(dateFrom: string): Promise<ProductProfitSyncResult[]> {
+    public syncFromDateToToday(accountId: string, token: string, dateFrom: string): Promise<ProductProfitSyncResult[]> {
         const today = this.profitSync.getCurrentMoscowDate();
 
-        return this.profitSync.syncRange(dateFrom, today);
+        return this.profitSync.syncRange(accountId, token, dateFrom, today);
     }
 
-    public getProfit(periodFrom: string, periodTo: string): Promise<ProductProfit[]> {
-        return this.repository.findByPeriod(periodFrom, periodTo);
+    public getProfit(accountId: string, periodFrom: string, periodTo: string): Promise<ProductProfit[]> {
+        return this.repository.findByPeriod(accountId, periodFrom, periodTo);
     }
 
-    public getProfitability(query: {
+    public getProfitability(accountId: string, query: {
         dateFrom?: string;
         dateTo?: string;
         sortBy?: string;
@@ -94,6 +94,7 @@ export class ProductsService {
         }
 
         const options: ProductProfitabilityOptions = {
+            accountId,
             dateFrom,
             dateTo,
             sortBy: sortBy as ProductProfitabilitySortBy,
@@ -104,6 +105,21 @@ export class ProductsService {
         };
 
         return this.repository.findProfitability(options);
+    }
+
+    public getConsumption(accountId: string, query: { page?: string; limit?: string; search?: string; sortDirection?: string; endingWithinWeek?: string; periodDays?: string }) {
+        const page = this.parsePositiveInteger(query.page, 1, 'page');
+        const limit = this.parsePositiveInteger(query.limit, 50, 'limit');
+        if (limit > 100) throw new BadRequestException('limit не может быть больше 100');
+        const search = query.search?.trim() || null;
+        if (search && search.length > 100) throw new BadRequestException('Поисковый запрос не может быть длиннее 100 символов');
+        const sortDirection = query.sortDirection ?? 'asc';
+        if (sortDirection !== 'asc' && sortDirection !== 'desc') throw new BadRequestException('sortDirection должен быть asc или desc');
+        const endingWithinWeek = query.endingWithinWeek === 'true';
+        if (query.endingWithinWeek !== undefined && query.endingWithinWeek !== 'true' && query.endingWithinWeek !== 'false') throw new BadRequestException('endingWithinWeek должен быть true или false');
+        const periodDays = this.parsePositiveInteger(query.periodDays, 7, 'periodDays');
+        if (periodDays > 365) throw new BadRequestException('periodDays не может быть больше 365');
+        return this.repository.findConsumption(accountId, page, limit, search, sortDirection, endingWithinWeek, periodDays);
     }
 
     private validateDate(value: string | undefined, field: string): string {

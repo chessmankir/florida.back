@@ -11,9 +11,10 @@ import { FlowwowProductLinksRepository } from './flowwow-product-links.repositor
 import { FlowwowProductLinksService } from './flowwow-product-links.service.js';
 import { FlowwowProductsRepository } from './flowwow-products.repository.js';
 import { FlowwowProductsService } from './flowwow-products.service.js';
+import { AuthModule } from '../../auth/auth.module.js';
 
 @Module({
-    imports: [FlowwowOrdersModule, TypeOrmModule.forFeature([FlowwowProduct, FlowwowProductInventoryLink], 'florida')],
+    imports: [AuthModule, FlowwowOrdersModule, TypeOrmModule.forFeature([FlowwowProduct, FlowwowProductInventoryLink], 'florida')],
     controllers: [FlowwowProductsController],
     providers: [
         FlowwowProductsClient,

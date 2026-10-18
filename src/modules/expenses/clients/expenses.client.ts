@@ -1,5 +1,4 @@
 import { BadGatewayException, Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 
 import axios, { type AxiosInstance } from 'axios';
 
@@ -20,15 +19,12 @@ export class ExpensesClient {
 
     private readonly http: AxiosInstance;
 
-    public constructor(config: ConfigService) {
-        const token = config.getOrThrow<string>('MOYSKLAD').trim();
-
+    public constructor() {
         this.http = axios.create({
             baseURL: 'https://api.moysklad.ru/api/remap/1.2',
             timeout: 30_000,
             maxRedirects: 0,
             headers: {
-                Authorization: `Bearer ${token}`,
                 Accept: 'application/json;charset=utf-8',
                 'Content-Type': 'application/json;charset=utf-8',
                 'Accept-Encoding': 'gzip',
@@ -36,19 +32,20 @@ export class ExpensesClient {
         });
     }
 
-    public getExpenseItems(request: ExpensePageRequest = {}): Promise<ExpenseRemotePage<ExpenseItemRemote>> {
-        return this.getPage('/entity/expenseitem', request);
+    public getExpenseItems(token: string, request: ExpensePageRequest = {}): Promise<ExpenseRemotePage<ExpenseItemRemote>> {
+        return this.getPage(token, '/entity/expenseitem', request);
     }
 
-    public getPaymentOuts(request: ExpensePageRequest = {}): Promise<ExpenseRemotePage<ExpenseDocumentRemote>> {
-        return this.getPage('/entity/paymentout', request);
+    public getPaymentOuts(token: string, request: ExpensePageRequest = {}): Promise<ExpenseRemotePage<ExpenseDocumentRemote>> {
+        return this.getPage(token, '/entity/paymentout', request);
     }
 
-    public getCashOuts(request: ExpensePageRequest = {}): Promise<ExpenseRemotePage<ExpenseDocumentRemote>> {
-        return this.getPage('/entity/cashout', request);
+    public getCashOuts(token: string, request: ExpensePageRequest = {}): Promise<ExpenseRemotePage<ExpenseDocumentRemote>> {
+        return this.getPage(token, '/entity/cashout', request);
     }
 
     private async getPage<T>(
+        token: string,
         path: string,
         request: ExpensePageRequest,
         maximum = 1000,
@@ -82,6 +79,7 @@ export class ExpensesClient {
                     await this.http.get<
                         ExpenseRemotePage<T>
                     >(path, {
+                        headers: { Authorization: `Bearer ${token}` },
                         params: {
                             limit,
                             offset,
@@ -187,12 +185,14 @@ export class ExpensesClient {
     }
 
     public getLosses(
+        token: string,
         request: ExpensePageRequest = {},
     ): Promise<ExpenseRemotePage<LossRemote>> {
         /*
          * При expand=positions используем limit 100.
          */
         return this.getPage(
+            token,
             '/entity/loss',
             request,
             100,
@@ -203,12 +203,14 @@ export class ExpensesClient {
     }
 
     public getLossPositions(
+        token: string,
         lossId: string,
         request: ExpensePageRequest = {},
     ): Promise<
         ExpenseRemotePage<LossPositionRemote>
     > {
         return this.getPage(
+            token,
             `/entity/loss/${encodeURIComponent(
                 lossId,
             )}/positions`,

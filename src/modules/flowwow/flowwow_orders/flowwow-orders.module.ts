@@ -16,9 +16,10 @@ import { FlowwowShopsRepository } from './flowwow-shops.repository.js';
 import { FlowwowShopsService } from './flowwow-shops.service.js';
 import { FlowwowCommissionController } from './flowwow-commission.controller.js';
 import { FlowwowCommissionService } from './flowwow-commission.service.js';
+import { AuthModule } from '../../auth/auth.module.js';
 
 @Module({
-    imports: [TypeOrmModule.forFeature([FlowwowOrder, FlowwowOrderPosition, FlowwowShop], 'florida')],
+    imports: [AuthModule, TypeOrmModule.forFeature([FlowwowOrder, FlowwowOrderPosition, FlowwowShop], 'florida')],
     controllers: [FlowwowOrdersController, FlowwowCommissionController],
     providers: [
         FlowwowAxiosService,

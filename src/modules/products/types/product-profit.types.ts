@@ -53,6 +53,7 @@ export type ProductProfitabilitySortBy =
 export type SortDirection = 'asc' | 'desc';
 
 export interface ProductProfitabilityOptions {
+    accountId: string;
     dateFrom: string;
     dateTo: string;
     sortBy: ProductProfitabilitySortBy;
@@ -112,4 +113,10 @@ export interface ProductProfitabilityResponse {
         totalItems: number;
         totalPages: number;
     };
+}
+
+export interface ProductConsumptionResponse {
+    period: { dateFrom: string; dateTo: string; days: number };
+    items: Array<{ productId: string; name: string; code: string | null; article: string | null; available: string; soldQuantity: string; averageDaily: string; daysRemaining: string | null; expectedOutOfStockDate: string | null }>;
+    pagination: { page: number; limit: number; totalItems: number; totalPages: number };
 }

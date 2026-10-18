@@ -14,8 +14,8 @@ import type {
 export class FlowwowProductsClient {
     public constructor(private readonly http: FlowwowAxiosService) {}
 
-    public async getProducts(shopId: number, request: FlowwowProductsRequest): Promise<FlowwowProductsPage> {
-        const response = await this.http.post<FlowwowProductsPage>(
+    public async getProducts(token: string, shopId: number, request: FlowwowProductsRequest): Promise<FlowwowProductsPage> {
+        const response = await this.http.post<FlowwowProductsPage>(token,
             '/apiseller/products',
             request,
             { params: { shopId } }
@@ -24,11 +24,21 @@ export class FlowwowProductsClient {
         return response.data;
     }
 
+    public async getCategoryTree(token: string, shopId: number): Promise<unknown> {
+        const response = await this.http.post<unknown>(token, '/apiseller/categories/tree', {}, { params: { shopId } });
+        return response.data;
+    }
+
+    public async createProducts(token: string, shopId: number, request: unknown): Promise<unknown> {
+        const response = await this.http.post<unknown>(token, '/apiseller/products/create', request, { params: { shopId } });
+        return response.data;
+    }
+
     public async mapOffers(
-        shopId: number,
+        token: string, shopId: number,
         request: FlowwowOfferMappingsRequest
     ): Promise<FlowwowOfferMappingsResponse> {
-        const response = await this.http.post<FlowwowOfferMappingsResponse>(
+        const response = await this.http.post<FlowwowOfferMappingsResponse>(token,
             '/apiseller/products/offersMappings',
             request,
             { params: { shopId } }
@@ -40,25 +50,25 @@ export class FlowwowProductsClient {
     }
 
     public async hideProducts(
-        shopId: number,
+        token: string, shopId: number,
         request: FlowwowProductStatusRequest
     ): Promise<FlowwowProductStatusResponse> {
-        return this.changeStatus('/apiseller/products/hide', shopId, request);
+        return this.changeStatus(token, '/apiseller/products/hide', shopId, request);
     }
 
     public async unhideProducts(
-        shopId: number,
+        token: string, shopId: number,
         request: FlowwowProductStatusRequest
     ): Promise<FlowwowProductStatusResponse> {
-        return this.changeStatus('/apiseller/products/unhide', shopId, request);
+        return this.changeStatus(token, '/apiseller/products/unhide', shopId, request);
     }
 
     private async changeStatus(
-        path: string,
+        token: string, path: string,
         shopId: number,
         request: FlowwowProductStatusRequest
     ): Promise<FlowwowProductStatusResponse> {
-        const response = await this.http.post<FlowwowProductStatusResponse>(path, request, {
+        const response = await this.http.post<FlowwowProductStatusResponse>(token, path, request, {
             params: { shopId },
         });
         if (

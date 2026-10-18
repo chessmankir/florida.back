@@ -1,7 +1,8 @@
+import { AccountOwnedEntity } from '../../auth/models/account-owned.model.js';
 import { Column, Entity, PrimaryColumn } from 'typeorm';
 
 @Entity('sales_customer_order_positions')
-export class SalesCustomerOrderPosition {
+export class SalesCustomerOrderPosition extends AccountOwnedEntity {
     @PrimaryColumn({ name: 'order_id', type: 'uuid' }) orderId: string;
     @PrimaryColumn('uuid') id: string;
     @Column({ name: 'assortment_id', type: 'uuid', nullable: true }) assortmentId: string | null;
@@ -14,3 +15,4 @@ export class SalesCustomerOrderPosition {
     @Column({ type: 'numeric', nullable: true }) reserve: string | null;
     @Column({ name: 'raw_json', type: 'jsonb' }) rawJson: unknown;
 }
+

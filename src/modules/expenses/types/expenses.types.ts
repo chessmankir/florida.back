@@ -72,6 +72,7 @@ export type ExpenseAnalyticsSortBy = 'moment' | 'sum' | 'expenseItem' | 'name';
 export type ExpenseSortDirection = 'asc' | 'desc';
 
 export interface ExpenseAnalyticsOptions {
+    accountId: string;
     dateFrom: string;
     dateTo: string;
 
@@ -110,6 +111,17 @@ export interface ExpenseAnalyticsItem {
     agentType: string | null;
 
     projectId: string | null;
+    positions: ExpenseLossPositionItem[];
+}
+
+export interface ExpenseLossPositionItem {
+    id: string;
+    assortmentId: string | null;
+    assortmentType: string | null;
+    name: string;
+    quantity: string;
+    priceMinor: string;
+    totalMinor: string;
 }
 
 export interface ExpenseCategorySummary {

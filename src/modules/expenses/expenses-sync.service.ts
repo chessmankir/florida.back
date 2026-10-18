@@ -24,21 +24,21 @@ export class ExpensesSyncService {
         this.pageSize = Math.min(Math.max(config.get<number>('MOYSKLAD_EXPENSES_PAGE_SIZE', 1000), 1), 1000);
     }
 
-    public async syncAll(): Promise<ExpensesSyncResult> {
+    public async syncAll(accountId: string, token: string): Promise<ExpensesSyncResult> {
         const expenseItems =
-            await this.syncExpenseItems();
+            await this.syncExpenseItems(accountId, token);
 
         const paymentOuts =
-            await this.syncPaymentOuts();
+            await this.syncPaymentOuts(accountId, token);
 
         const cashOuts =
-            await this.syncCashOuts();
+            await this.syncCashOuts(accountId, token);
 
         /*
          * Списания загружаются после денежных расходов.
          */
         const losses =
-            await this.syncLosses();
+            await this.syncLosses(accountId, token);
 
         return {
             expenseItems,
@@ -54,7 +54,7 @@ export class ExpensesSyncService {
         };
     }
 
-    private async syncLosses(): Promise<number> {
+    private async syncLosses(accountId: string, token: string): Promise<number> {
         const syncedAt = new Date();
         const lossIds = new Set<string>();
 
@@ -63,7 +63,7 @@ export class ExpensesSyncService {
 
         while (true) {
             const page =
-                await this.client.getLosses({
+                await this.client.getLosses(token, {
                     limit: Math.min(
                         this.pageSize,
                         100,
@@ -77,7 +77,7 @@ export class ExpensesSyncService {
             for (const remoteLoss of page.rows) {
                 const remotePositions =
                     await this.loadLossPositions(
-                        remoteLoss,
+                        token, remoteLoss,
                     );
 
                 const loss =
@@ -106,7 +106,7 @@ export class ExpensesSyncService {
 
             saved +=
                 await this.repository.saveLossChunk(
-                    losses,
+                    accountId, losses,
                     positions,
                 );
 
@@ -131,13 +131,14 @@ export class ExpensesSyncService {
         }
 
         await this.repository.deleteMissingLosses(
-            [...lossIds],
+            accountId, [...lossIds],
         );
 
         return saved;
     }
 
     private async loadLossPositions(
+        token: string,
         loss: LossRemote,
     ): Promise<LossPositionRemote[]> {
         const expected =
@@ -180,7 +181,7 @@ export class ExpensesSyncService {
         while (true) {
             const page =
                 await this.client.getLossPositions(
-                    loss.id,
+                    token, loss.id,
                     {
                         limit: 1000,
                         offset,
@@ -231,45 +232,45 @@ export class ExpensesSyncService {
         }
     }
 
-    private async syncExpenseItems(): Promise<number> {
+    private async syncExpenseItems(accountId: string, token: string): Promise<number> {
         return this.syncCollection({
             name: 'expenseitem',
             loadPage: (offset) =>
-                this.client.getExpenseItems({
+                this.client.getExpenseItems(token, {
                     limit: this.pageSize,
                     offset,
                 }),
             map: (row, syncedAt) => ExpensesMapper.toExpenseItem(row, syncedAt),
-            save: (rows) => this.repository.upsertExpenseItems(rows),
-            deleteMissing: (ids) => this.repository.deleteMissingExpenseItems(ids),
+            save: (rows) => this.repository.upsertExpenseItems(accountId, rows),
+            deleteMissing: (ids) => this.repository.deleteMissingExpenseItems(accountId, ids),
         });
     }
 
-    private async syncPaymentOuts(): Promise<number> {
+    private async syncPaymentOuts(accountId: string, token: string): Promise<number> {
         return this.syncCollection({
             name: 'paymentout',
             loadPage: (offset) =>
-                this.client.getPaymentOuts({
+                this.client.getPaymentOuts(token, {
                     limit: this.pageSize,
                     offset,
                 }),
             map: (row, syncedAt) => ExpensesMapper.toPaymentOut(row, syncedAt),
-            save: (rows) => this.repository.upsertPaymentOuts(rows),
-            deleteMissing: (ids) => this.repository.deleteMissingPaymentOuts(ids),
+            save: (rows) => this.repository.upsertPaymentOuts(accountId, rows),
+            deleteMissing: (ids) => this.repository.deleteMissingPaymentOuts(accountId, ids),
         });
     }
 
-    private async syncCashOuts(): Promise<number> {
+    private async syncCashOuts(accountId: string, token: string): Promise<number> {
         return this.syncCollection({
             name: 'cashout',
             loadPage: (offset) =>
-                this.client.getCashOuts({
+                this.client.getCashOuts(token, {
                     limit: this.pageSize,
                     offset,
                 }),
             map: (row, syncedAt) => ExpensesMapper.toCashOut(row, syncedAt),
-            save: (rows) => this.repository.upsertCashOuts(rows),
-            deleteMissing: (ids) => this.repository.deleteMissingCashOuts(ids),
+            save: (rows) => this.repository.upsertCashOuts(accountId, rows),
+            deleteMissing: (ids) => this.repository.deleteMissingCashOuts(accountId, ids),
         });
     }
 

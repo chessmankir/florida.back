@@ -1,9 +1,10 @@
+import { AccountOwnedEntity } from '../../auth/models/account-owned.model.js';
 import { Column, Entity, Index, PrimaryColumn } from 'typeorm';
 
 @Entity('expense_loss_positions')
 @Index('idx_expense_loss_positions_loss', ['lossId'])
 @Index('idx_expense_loss_positions_assortment', ['assortmentId'])
-export class ExpenseLossPosition {
+export class ExpenseLossPosition extends AccountOwnedEntity {
     @PrimaryColumn({
         name: 'loss_id',
         type: 'uuid',
@@ -68,3 +69,4 @@ export class ExpenseLossPosition {
     })
     vatEnabled!: boolean | null;
 }
+

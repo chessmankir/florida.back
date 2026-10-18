@@ -1,10 +1,11 @@
+import { AccountOwnedEntity } from '../../auth/models/account-owned.model.js';
 import { Column, CreateDateColumn, Entity, Index, PrimaryColumn, UpdateDateColumn } from 'typeorm';
 
 @Entity('product_profit_daily')
 @Index('idx_product_profit_daily_period', ['periodDate'])
 @Index('idx_product_profit_daily_product', ['productId'])
 @Index('idx_product_profit_daily_period_product', ['periodDate', 'productId'])
-export class ProductProfit {
+export class ProductProfit extends AccountOwnedEntity {
     @PrimaryColumn({
         name: 'product_id',
         type: 'uuid',
@@ -137,3 +138,4 @@ export class ProductProfit {
     })
     updatedAt!: Date;
 }
+

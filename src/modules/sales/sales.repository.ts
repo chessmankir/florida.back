@@ -12,11 +12,11 @@ export class SalesRepository {
 
     constructor(@InjectDataSource('florida') private readonly database: DataSource) {}
 
-    public async saveChunk(snapshots: SalesOrderSnapshot[]): Promise<void> {
+    public async saveChunk(accountId: string, snapshots: SalesOrderSnapshot[]): Promise<void> {
         if (snapshots.length === 0) return;
 
-        const orders = snapshots.map((snapshot) => snapshot.order);
-        const positions = snapshots.flatMap((snapshot) => snapshot.positions);
+        const orders = snapshots.map((snapshot) => ({ ...snapshot.order, accountId }));
+        const positions = snapshots.flatMap((snapshot) => snapshot.positions.map((position) => ({ ...position, accountId })));
 
         // Replacing positions and updating orders must commit together.
         await this.database.transaction(async (manager) => {
@@ -24,7 +24,7 @@ export class SalesRepository {
                 await manager.upsert(SalesCustomerOrder, orders.slice(offset, offset + this.batchSize), ['id']);
             }
 
-            await manager.delete(SalesCustomerOrderPosition, { orderId: In(orders.map((order) => order.id)) });
+            await manager.delete(SalesCustomerOrderPosition, { accountId, orderId: In(orders.map((order) => order.id)) });
 
             for (let offset = 0; offset < positions.length; offset += this.batchSize) {
                 await manager.insert(SalesCustomerOrderPosition, positions.slice(offset, offset + this.batchSize));
@@ -32,13 +32,13 @@ export class SalesRepository {
         });
     }
 
-    public findOne(id: string): Promise<SalesCustomerOrder | null> {
-        return this.database.getRepository(SalesCustomerOrder).findOneBy({ id });
+    public findOne(accountId: string, id: string): Promise<SalesCustomerOrder | null> {
+        return this.database.getRepository(SalesCustomerOrder).findOneBy({ accountId, id });
     }
 
-    public findPositions(orderId: string): Promise<SalesCustomerOrderPosition[]> {
+    public findPositions(accountId: string, orderId: string): Promise<SalesCustomerOrderPosition[]> {
         return this.database.getRepository(SalesCustomerOrderPosition).find({
-            where: { orderId },
+            where: { accountId, orderId },
             order: { id: 'ASC' },
         });
     }

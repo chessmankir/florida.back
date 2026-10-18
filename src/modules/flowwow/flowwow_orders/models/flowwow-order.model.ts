@@ -1,3 +1,4 @@
+import { AccountOwnedEntity } from '../../../auth/models/account-owned.model.js';
 import { Column, Entity, Index, PrimaryColumn } from 'typeorm';
 
 @Entity('flowwow_orders')
@@ -5,7 +6,7 @@ import { Column, Entity, Index, PrimaryColumn } from 'typeorm';
 @Index('ix_flowwow_orders_status', ['status'])
 @Index('ix_flowwow_orders_created_at_source', ['createdAtSource'])
 @Index('ix_flowwow_orders_shop_created_at_source', ['shopId', 'createdAtSource'])
-export class FlowwowOrder {
+export class FlowwowOrder extends AccountOwnedEntity {
     @PrimaryColumn({ name: 'shop_id', type: 'integer' }) shopId: number;
     @PrimaryColumn({ name: 'order_id', type: 'integer' }) orderId: number;
     @Column('smallint') status: number;
@@ -27,3 +28,4 @@ export class FlowwowOrder {
     @Column({ name: 'raw_json', type: 'jsonb' }) rawJson: unknown;
     @Column({ name: 'synced_at', type: 'timestamptz' }) syncedAt: Date;
 }
+

@@ -6,6 +6,7 @@ import Joi from 'joi';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { SynchronizationModule } from '../modules/synchronization/synchronization.module.js';
 import { ScheduleModule } from '@nestjs/schedule';
+import { AuthModule } from '../modules/auth/auth.module.js';
 
 @Module({
     imports: [
@@ -13,7 +14,7 @@ import { ScheduleModule } from '@nestjs/schedule';
             isGlobal: true,
             validationSchema: Joi.object({
                 PORT: Joi.number().port().default(3025),
-                MOYSKLAD: Joi.string().min(1).required(),
+                MOYSKLAD: Joi.string().allow('').optional(),
                 POSTGRES_HOST: Joi.string().required(),
                 POSTGRES_PORT: Joi.number().port().default(5432),
                 POSTGRES_DATABASE: Joi.string().required(),
@@ -31,10 +32,12 @@ import { ScheduleModule } from '@nestjs/schedule';
                 FLOWWOW_CUSTOMER_BONUS_PERCENT: Joi.number().min(0).max(100).default(4),
                 FLOWWOW_FIXED_COMMISSION_PERCENT: Joi.number().min(0).max(100).default(27),
                 FLOWWOW_VARIABLE_COMMISSION_PERCENT: Joi.number().min(0).max(100).default(2.5),
+                AUTH_SESSION_SECRET: Joi.string().min(32).optional(),
             }),
         }),
 
         ScheduleModule.forRoot(),
+        AuthModule,
         SynchronizationModule,
         TypeOrmModule.forRootAsync({
             name: 'florida',

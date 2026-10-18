@@ -10,6 +10,7 @@ import type {
     MoyskladInventorySnapshot,
     MoyskladInventorySyncResult,
 } from './types/moysklad-inventory.types.js';
+import { AccountAccessService } from '../auth/account-access.service.js';
 
 @Injectable()
 export class MoyskladInventoryService {
@@ -20,15 +21,17 @@ export class MoyskladInventoryService {
         config: ConfigService,
         private readonly client: MoyskladInventoryClient,
         private readonly mapper: MoyskladInventoryMapper,
-        private readonly repository: MoyskladInventoryRepository
+        private readonly repository: MoyskladInventoryRepository,
+        private readonly accounts: AccountAccessService
     ) { this.pageSize = config.get<number>('MOYSKLAD_SYNC_PAGE_SIZE', 100); }
 
-    public async syncAll(): Promise<MoyskladInventorySyncResult> {
+    public async syncAll(accountId: string, token?: string): Promise<MoyskladInventorySyncResult> {
+        const moyskladToken = token ?? await this.accounts.moyskladToken(accountId);
         const syncedAt = new Date();
         const products = new Map<string, MoyskladInventorySnapshot>();
         let assortmentReceived = 0;
         for (let offset = 0; ; offset += this.pageSize) {
-            const page = await this.client.getAssortmentPage(this.pageSize, offset);
+            const page = await this.client.getAssortmentPage(moyskladToken, this.pageSize, offset);
             for (const row of page.rows) {
                 const snapshot = this.mapper.fromAssortment(row, syncedAt);
                 products.set(snapshot.id, snapshot);
@@ -45,7 +48,7 @@ export class MoyskladInventoryService {
         for (const bundleId of bundleIds) {
             let receivedForBundle = 0;
             for (let offset = 0; ; offset += this.pageSize) {
-                const page = await this.client.getBundleComponentsPage(bundleId, this.pageSize, offset);
+                const page = await this.client.getBundleComponentsPage(moyskladToken, bundleId, this.pageSize, offset);
                 for (const component of page.rows) {
                     components.push({
                         bundleId,
@@ -67,7 +70,7 @@ export class MoyskladInventoryService {
 
         let stockRowsReceived = 0;
         for (let offset = 0; ; offset += this.pageSize) {
-            const page = await this.client.getStockPage(this.pageSize, offset);
+            const page = await this.client.getStockPage(moyskladToken, this.pageSize, offset);
             for (const row of page.rows) {
                 const id = this.mapper.stockId(row);
                 const snapshot = this.mapper.applyStock(products.get(id), row, syncedAt);
@@ -77,8 +80,8 @@ export class MoyskladInventoryService {
             if (stockRowsReceived >= page.meta.size) break;
             if (page.rows.length === 0) throw new BadGatewayException('МойСклад вернул пустую страницу остатков');
         }
-        const saved = await this.repository.saveAll([...products.values()]);
-        const componentsReceived = await this.repository.replaceBundleComponents(bundleIds, components);
+        const saved = await this.repository.saveAll(accountId, [...products.values()]);
+        const componentsReceived = await this.repository.replaceBundleComponents(accountId, bundleIds, components);
         this.logger.log({
             event: 'moysklad_inventory_synchronization_finished',
             assortmentReceived,
@@ -90,14 +93,14 @@ export class MoyskladInventoryService {
         return { assortmentReceived, stockRowsReceived, bundlesReceived: bundleIds.length, componentsReceived, saved };
     }
 
-    public async getBundleComponents(bundleIdValue: string): Promise<MoyskladBundleComponentsResponse> {
+    public async getBundleComponents(accountId: string, bundleIdValue: string): Promise<MoyskladBundleComponentsResponse> {
         const bundleId = this.uuid(bundleIdValue, 'bundleId');
-        const result = await this.repository.findBundleComponents(bundleId);
+        const result = await this.repository.findBundleComponents(accountId, bundleId);
         if (!result) throw new NotFoundException('Комплект МойСклад не найден');
         return result;
     }
 
-    public getProducts(query: Record<string, string | undefined>): Promise<MoyskladInventoryListResponse> {
+    public getProducts(accountId: string, query: Record<string, string | undefined>): Promise<MoyskladInventoryListResponse> {
         const page = this.positiveInteger(query.page, 1, 'page');
         const limit = this.positiveInteger(query.limit, 50, 'limit');
         if (limit > 100) throw new BadRequestException('limit не может быть больше 100');
@@ -111,6 +114,7 @@ export class MoyskladInventoryService {
         if (!sortFields.includes(sortBy as typeof sortFields[number])) throw new BadRequestException('Некорректный sortBy');
         if (sortDirection !== 'asc' && sortDirection !== 'desc') throw new BadRequestException('sortDirection должен быть asc или desc');
         return this.repository.findPage({
+            accountId,
             page, limit, search, type, archived,
             sortBy: sortBy as typeof sortFields[number], sortDirection,
         });

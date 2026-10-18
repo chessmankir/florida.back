@@ -17,12 +17,12 @@ export class ProductsRepository {
         private readonly productProfit: Repository<ProductProfit>
     ) {}
 
-    public async upsertProfit(rows: ProductProfit[]): Promise<number> {
+    public async upsertProfit(accountId: string, rows: ProductProfit[]): Promise<number> {
         if (rows.length === 0) {
             return 0;
         }
 
-        await this.productProfit.upsert(rows, {
+        await this.productProfit.upsert(rows.map((row) => ({ ...row, accountId })), {
             conflictPaths: ['productId', 'periodDate'],
             skipUpdateIfNoValuesChanged: true,
         });
@@ -36,9 +36,9 @@ export class ProductsRepository {
      *
      * Вызывается только после успешной загрузки всех страниц.
      */
-    public async deleteMissingForDate(periodDate: string, productIds: string[]): Promise<void> {
+    public async deleteMissingForDate(accountId: string, periodDate: string, productIds: string[]): Promise<void> {
         if (productIds.length === 0) {
-            await this.productProfit.delete({ periodDate });
+            await this.productProfit.delete({ accountId, periodDate });
             return;
         }
 
@@ -47,15 +47,17 @@ export class ProductsRepository {
                 DELETE FROM product_profit_daily
                 WHERE period_date = $1
                   AND NOT (product_id = ANY($2::uuid[]))
+                  AND account_id = $3::uuid
             `,
-            [periodDate, productIds]
+            [periodDate, productIds, accountId]
         );
     }
 
-    public async findByPeriod(periodFrom: string, periodTo: string): Promise<ProductProfit[]> {
+    public async findByPeriod(accountId: string, periodFrom: string, periodTo: string): Promise<ProductProfit[]> {
         return this.productProfit
             .createQueryBuilder('profit')
-            .where('profit.period_date >= :periodFrom', { periodFrom })
+            .where('profit.accountId = :accountId', { accountId })
+            .andWhere('profit.period_date >= :periodFrom', { periodFrom })
             .andWhere('profit.period_date <= :periodTo', { periodTo })
             .orderBy('profit.period_date', 'ASC')
             .addOrderBy('profit.name', 'ASC')
@@ -93,6 +95,7 @@ export class ProductsRepository {
             options.dateFrom,
             options.dateTo,
             options.search,
+            options.accountId,
         ];
 
         const commonQuery = `
@@ -120,6 +123,7 @@ export class ProductsRepository {
             FROM product_profit_daily
             WHERE period_date >= $1::date
               AND period_date <= $2::date
+              AND account_id = $4::uuid
             GROUP BY product_id
         ),
 
@@ -133,6 +137,7 @@ export class ProductsRepository {
             FROM product_profit_daily
             WHERE period_date >= $1::date
               AND period_date <= $2::date
+              AND account_id = $4::uuid
             ORDER BY
                 product_id,
                 period_date DESC
@@ -217,8 +222,8 @@ export class ProductsRepository {
         ORDER BY
             ${sortColumn} ${sortDirection},
             product_id ASC
-        LIMIT $4
-        OFFSET $5
+        LIMIT $5
+        OFFSET $6
     `;
 
         const summaryQuery = `
@@ -350,6 +355,41 @@ export class ProductsRepository {
                         ),
             },
         };
+    }
+
+    public async findConsumption(accountId: string, page: number, limit: number, search: string | null, sortDirection: 'asc' | 'desc', endingWithinWeek: boolean, periodDays: number) {
+        const offset = (page - 1) * limit;
+        const rows = await this.productProfit.query(`
+            WITH sales AS (
+                SELECT product_id, SUM(sell_quantity - return_quantity) AS sold_quantity
+                FROM product_profit_daily
+                WHERE account_id = $1::uuid
+                  AND period_date >= CURRENT_DATE - (($6::integer - 1) * INTERVAL '1 day')
+                  AND period_date <= CURRENT_DATE
+                GROUP BY product_id
+            ), report AS (
+                SELECT inventory.id, inventory.name, inventory.code, inventory.article, GREATEST(inventory.available, 0) AS available,
+                       GREATEST(COALESCE(sales.sold_quantity, 0), 0) AS sold_quantity,
+                       GREATEST(COALESCE(sales.sold_quantity, 0), 0) / $6::numeric AS average_daily
+                FROM moysklad_inventory_products inventory
+                LEFT JOIN sales ON sales.product_id = inventory.id
+                WHERE inventory.account_id = $1::uuid AND COALESCE(inventory.archived, false) = false
+                  AND ($2::text IS NULL OR inventory.name ILIKE '%' || $2 || '%' OR inventory.code ILIKE '%' || $2 || '%' OR inventory.article ILIKE '%' || $2 || '%')
+            ), filtered AS (
+                SELECT *, CASE WHEN average_daily > 0 THEN available / average_daily ELSE NULL END AS days_remaining
+                FROM report
+                WHERE $5::boolean = false OR (average_daily > 0 AND available / average_daily <= 7)
+            )
+            SELECT id::text AS "productId", name, code, article, available::text AS available,
+                   sold_quantity::text AS "soldQuantity", ROUND(average_daily, 2)::text AS "averageDaily",
+                   CASE WHEN days_remaining IS NOT NULL THEN ROUND(days_remaining, 1)::text ELSE NULL END AS "daysRemaining",
+                   CASE WHEN days_remaining IS NOT NULL THEN (CURRENT_DATE + CEIL(days_remaining)::integer)::text ELSE NULL END AS "expectedOutOfStockDate",
+                   COUNT(*) OVER()::integer AS "totalItems"
+            FROM filtered ORDER BY days_remaining ${sortDirection === 'asc' ? 'ASC' : 'DESC'} NULLS LAST, name ASC
+            LIMIT $3 OFFSET $4
+        `, [accountId, search, limit, offset, endingWithinWeek, periodDays]) as Array<Record<string, unknown>>;
+        const totalItems = Number(rows[0]?.totalItems ?? 0);
+        return { period: { dateFrom: new Date(Date.now() - (periodDays - 1) * 86400000).toISOString().slice(0, 10), dateTo: new Date().toISOString().slice(0, 10), days: periodDays }, items: rows.map(({ totalItems: _, ...row }) => row), pagination: { page, limit, totalItems, totalPages: totalItems === 0 ? 0 : Math.ceil(totalItems / limit) } };
     }
 }
 

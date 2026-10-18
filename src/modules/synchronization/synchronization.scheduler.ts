@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { SchedulerRegistry } from '@nestjs/schedule';
 import { CronJob } from 'cron';
 import { SynchronizationService } from './synchronization.service.js';
+import { AccountAccessService } from '../auth/account-access.service.js';
 
 @Injectable()
 export class SynchronizationScheduler implements OnApplicationBootstrap {
@@ -11,7 +12,8 @@ export class SynchronizationScheduler implements OnApplicationBootstrap {
     constructor(
         private readonly config: ConfigService,
         private readonly registry: SchedulerRegistry,
-        private readonly synchronization: SynchronizationService
+        private readonly synchronization: SynchronizationService,
+        private readonly accounts: AccountAccessService
     ) {}
 
     onApplicationBootstrap(): void {
@@ -25,7 +27,10 @@ export class SynchronizationScheduler implements OnApplicationBootstrap {
             waitForCompletion: true,
             onTick: async () => {
                 try {
-                    await this.synchronization.run();
+                    const accounts = await this.accounts.findAllWithTokens();
+                    for (const account of accounts) {
+                        await this.synchronization.run(account.id);
+                    }
                 } catch {
                     this.logger.error('Не удалось выполнить синхронизацию. Проверьте соединение с БД и применение миграций.');
                 }

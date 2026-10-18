@@ -26,8 +26,8 @@ export class FlowwowOrdersService {
         this.pageSize = config.get<number>('FLOWWOW_SYNC_PAGE_SIZE', 100);
     }
 
-    public async syncAll(): Promise<FlowwowOrdersSyncResult> {
-        const shopsResult = await this.shopsService.syncAll();
+    public async syncAll(accountId: string, token: string): Promise<FlowwowOrdersSyncResult> {
+        const shopsResult = await this.shopsService.syncAll(accountId, token);
         const shopIds = shopsResult.activeShopIds;
         if (shopIds.length === 0) {
             throw new BadGatewayException('Flowwow: активные магазины не найдены');
@@ -36,7 +36,7 @@ export class FlowwowOrdersService {
         // Сначала полностью читаем доступные заказы. До окончания чтения в базу не пишем.
         const remoteOrders: FlowwowRemoteOrder[] = [];
         for (const shopId of shopIds) {
-            remoteOrders.push(...(await this.fetchAllShopOrders(shopId)));
+            remoteOrders.push(...(await this.fetchAllShopOrders(token, shopId)));
         }
 
         const uniqueOrders = new Map<string, FlowwowRemoteOrder>();
@@ -56,7 +56,7 @@ export class FlowwowOrdersService {
         for (const [periodDate, periodOrders] of this.groupByCreatedDate(orders)) {
             const syncedAt = new Date();
             const snapshots = periodOrders.map((order) => this.mapper.mapSnapshot(order, syncedAt));
-            await this.repository.saveChunk(snapshots);
+            await this.repository.saveChunk(accountId, snapshots);
             this.logger.log({ event: 'flowwow_orders_day_saved', periodDate, saved: snapshots.length });
         }
 
@@ -72,7 +72,7 @@ export class FlowwowOrdersService {
         };
     }
 
-    public async getOrders(query: {
+    public async getOrders(accountId: string, query: {
         dateFrom?: string;
         dateTo?: string;
         shopId?: string;
@@ -96,16 +96,16 @@ export class FlowwowOrdersService {
             : this.parsePositiveInteger(query.shopId, 0, 'shopId');
 
         const [result, shops] = await Promise.all([
-            this.repository.findOrders({ dateFrom, dateTo, shopId, page, limit }),
-            this.shopsService.findActiveShops(),
+            this.repository.findOrders(accountId, { dateFrom, dateTo, shopId, page, limit }),
+            this.shopsService.findActiveShops(accountId),
         ]);
         return { ...result, shops };
     }
 
-    private async fetchAllShopOrders(shopId: number): Promise<FlowwowRemoteOrder[]> {
+    private async fetchAllShopOrders(token: string, shopId: number): Promise<FlowwowRemoteOrder[]> {
         const orders: FlowwowRemoteOrder[] = [];
         for (let page = 1; ; page++) {
-            const response = await this.client.getOrders(shopId, {
+            const response = await this.client.getOrders(token, shopId, {
                 page,
                 limit: this.pageSize,
             });

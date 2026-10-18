@@ -2,6 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import ExcelJS from 'exceljs';
 
 import { FlowwowOrdersRepository } from './flowwow-orders.repository.js';
+import { FlowwowShopsRepository } from './flowwow-shops.repository.js';
 import type {
     FlowwowOrderFinanceAmounts,
     FlowwowOrdersFinanceImportResult,
@@ -24,14 +25,19 @@ interface ImportedOrderMetadata {
 @Injectable()
 export class FlowwowOrdersFinanceImportService {
     public constructor(
-        private readonly repository: FlowwowOrdersRepository
+        private readonly repository: FlowwowOrdersRepository,
+        private readonly shops: FlowwowShopsRepository
     ) {}
 
     public async import(
+        accountId: string,
         file: UploadedFlowwowFinanceFile | undefined,
         shopIdValue?: string
     ): Promise<FlowwowOrdersFinanceImportResult> {
         const shopId = this.shopId(shopIdValue);
+        if (!(await this.shops.exists(accountId, shopId))) {
+            throw new BadRequestException('Выбранный магазин не принадлежит текущему аккаунту');
+        }
         if (!file?.buffer?.length) throw new BadRequestException('Передайте XLSX-файл в поле file');
         if (!file.originalname.toLowerCase().endsWith('.xlsx')) {
             throw new BadRequestException('Поддерживаются только файлы .xlsx');
@@ -102,7 +108,7 @@ export class FlowwowOrdersFinanceImportService {
             variableCommissionAmount: this.fromKopecks(totals.variableCommissionAmount),
         }));
         const existingResult = await this.repository.updateFinanceAmounts(
-            shopId,
+            accountId, shopId,
             financeRows
         );
         let createdOrders = 0;
@@ -112,7 +118,7 @@ export class FlowwowOrdersFinanceImportService {
             if (!finance || !dates || Number(finance.customerPaidAmount) <= 0) continue;
 
             const syncedAt = new Date();
-            await this.repository.saveChunk([{
+            await this.repository.saveChunk(accountId, [{
                 order: {
                     shopId,
                     orderId,
@@ -144,7 +150,7 @@ export class FlowwowOrdersFinanceImportService {
             existingResult.missingOrderIds.includes(row.orderId)
         );
         const createdResult = await this.repository.updateFinanceAmounts(
-            shopId,
+            accountId, shopId,
             missingRows
         );
 
