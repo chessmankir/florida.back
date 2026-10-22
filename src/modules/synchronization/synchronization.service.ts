@@ -54,11 +54,11 @@ export class SynchronizationService {
 
         if (scope === 'all' || scope === 'products') {
             await this.synchronizeProducts(accountId, counts, errors);
-        }
+        }*/
 
         if (scope === 'all' || scope === 'expenses') {
             await this.synchronizeExpenses(accountId, counts, errors);
-        }*/
+        }
 
         if (scope === 'all' || scope === 'flowwow_orders') {
             await this.synchronizeFlowwowOrders(accountId, counts, errors);
