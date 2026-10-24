@@ -191,7 +191,14 @@ export class FlowwowProductsService {
         }
         if (!Number.isFinite(Number(source.height)) || Number(source.height) <= 0 || !Number.isFinite(Number(source.width)) || Number(source.width) <= 0) throw new BadRequestException('Укажите ширину и высоту');
         if (!product.manufacturerName) delete product.manufacturerName;
-        const result = await this.client.createProducts(token, shopId, { products: [product] }) as { summary?: { success?: number }; errors?: Array<{ message?: string }> };
+        const flowwowRequest = { products: [product] };
+        console.log('[Flowwow products/create] request', JSON.stringify({
+            endpoint: '/apiseller/products/create',
+            shopId,
+            body: flowwowRequest,
+        }, null, 2));
+        const result = await this.client.createProducts(token, shopId, flowwowRequest) as { summary?: { success?: number }; errors?: Array<{ message?: string }> };
+        console.log('[Flowwow products/create] response', JSON.stringify({ shopId, body: result }, null, 2));
         if (!result.summary?.success) throw new BadGatewayException(result.errors?.[0]?.message ?? 'Flowwow не создал товар');
         await this.syncShop(accountId, token, shopId);
         return result;
