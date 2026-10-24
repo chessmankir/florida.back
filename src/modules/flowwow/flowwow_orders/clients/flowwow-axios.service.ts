@@ -9,6 +9,11 @@ import axios, {
 interface RetriableConfig extends InternalAxiosRequestConfig {
     __flowwowRetryCount?: number;
     __flowwowGatewayRetryCount?: number;
+    __flowwowTokenKey?: string;
+}
+
+interface FlowwowRequestConfig extends AxiosRequestConfig {
+    __flowwowTokenKey?: string;
 }
 
 @Injectable()
@@ -21,7 +26,7 @@ export class FlowwowAxiosService {
 
     private readonly logger = new Logger(FlowwowAxiosService.name);
     private readonly http: AxiosInstance;
-    private readonly cookies = new Map<string, string>();
+    private readonly cookiesByToken = new Map<string, Map<string, string>>();
 
     public constructor() {
         this.http = axios.create({
@@ -52,11 +57,12 @@ export class FlowwowAxiosService {
         return this.http.request<TResponse>(config);
     }
 
-    private withToken(token: string, config?: AxiosRequestConfig): AxiosRequestConfig {
+    private withToken(token: string, config?: AxiosRequestConfig): FlowwowRequestConfig {
         const normalizedToken = this.normalizeToken(token);
-        const cookie = this.cookieHeader();
+        const cookie = this.cookieHeader(normalizedToken);
         return {
             ...config,
+            __flowwowTokenKey: normalizedToken,
             headers: {
                 ...config?.headers,
                 Authorization: `Bearer ${normalizedToken}`,
@@ -102,7 +108,8 @@ export class FlowwowAxiosService {
     private registerInterceptors(): void {
         this.http.interceptors.response.use(
             (response: AxiosResponse) => {
-                this.captureCookies(response.headers);
+                const tokenKey = (response.config as RetriableConfig).__flowwowTokenKey;
+                this.captureCookies(response.headers, tokenKey);
                 return response;
             },
             async (error: unknown) => this.handleResponseError(error)
@@ -117,14 +124,15 @@ export class FlowwowAxiosService {
 
         const status = error.response?.status;
         const config = error.config as RetriableConfig | undefined;
-        const receivedCookies = this.captureCookies(error.response?.headers);
+        const tokenKey = config?.__flowwowTokenKey;
+        const receivedCookies = this.captureCookies(error.response?.headers, tokenKey);
 
         if (status === 423 && config) {
             const retryCount = (config.__flowwowGatewayRetryCount ?? 0) + 1;
             if (receivedCookies && retryCount <= FlowwowAxiosService.MAX_GATEWAY_RETRIES) {
                 const waitMs = retryCount * 1_000;
                 config.__flowwowGatewayRetryCount = retryCount;
-                config.headers.set('Cookie', this.cookieHeader());
+                config.headers.set('Cookie', this.cookieHeader(tokenKey));
                 this.logger.warn({
                     event: 'flowwow_gateway_cookie_retry_scheduled',
                     method: config.method,
@@ -133,7 +141,7 @@ export class FlowwowAxiosService {
                     retryCount,
                     maxRetries: FlowwowAxiosService.MAX_GATEWAY_RETRIES,
                     waitMs,
-                    cookieNames: [...this.cookies.keys()],
+                    cookieNames: [...this.cookiesFor(tokenKey).keys()],
                 });
                 await this.sleep(waitMs);
                 return this.http.request(config);
@@ -203,8 +211,8 @@ export class FlowwowAxiosService {
         });
     }
 
-    private captureCookies(headers: unknown): boolean {
-        if (!headers || typeof headers !== 'object') return false;
+    private captureCookies(headers: unknown, tokenKey: string | undefined): boolean {
+        if (!tokenKey || !headers || typeof headers !== 'object') return false;
         const source = headers as Record<string, unknown> & { getSetCookie?: () => string[] };
         const setCookie = typeof source.getSetCookie === 'function'
             ? source.getSetCookie()
@@ -215,6 +223,7 @@ export class FlowwowAxiosService {
                 ? [setCookie]
                 : [];
         let changed = false;
+        const cookies = this.cookiesFor(tokenKey);
         for (const value of values) {
             const pair = value.split(';', 1)[0];
             const separator = pair.indexOf('=');
@@ -222,16 +231,26 @@ export class FlowwowAxiosService {
             const name = pair.slice(0, separator).trim();
             const cookieValue = pair.slice(separator + 1).trim();
             if (!name) continue;
-            if (this.cookies.get(name) !== cookieValue) changed = true;
-            this.cookies.set(name, cookieValue);
+            if (cookies.get(name) !== cookieValue) changed = true;
+            cookies.set(name, cookieValue);
         }
         return changed;
     }
 
-    private cookieHeader(): string {
-        return [...this.cookies.entries()]
+    private cookieHeader(tokenKey: string | undefined): string {
+        return [...this.cookiesFor(tokenKey).entries()]
             .map(([name, value]) => `${name}=${value}`)
             .join('; ');
+    }
+
+    private cookiesFor(tokenKey: string | undefined): Map<string, string> {
+        if (!tokenKey) return new Map<string, string>();
+        let cookies = this.cookiesByToken.get(tokenKey);
+        if (!cookies) {
+            cookies = new Map<string, string>();
+            this.cookiesByToken.set(tokenKey, cookies);
+        }
+        return cookies;
     }
 
     private getRetryAfterSeconds(headers: Record<string, unknown> | undefined): number {
