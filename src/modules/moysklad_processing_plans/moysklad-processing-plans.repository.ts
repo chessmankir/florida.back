@@ -58,6 +58,8 @@ export class MoyskladProcessingPlansRepository {
                    inventory.code, inventory.article, material.quantity::text AS quantity,
                    COALESCE(inventory.stock_cost_minor, inventory.buy_price_minor)::text AS "unitCostMinor",
                    (material.quantity * COALESCE(inventory.stock_cost_minor, inventory.buy_price_minor, 0))::text AS "totalCostMinor",
+                   inventory.sale_price_minor::text AS "unitSalePriceMinor",
+                   (material.quantity * COALESCE(inventory.sale_price_minor, 0))::text AS "totalSalePriceMinor",
                    COALESCE(inventory.available, 0)::text AS available
             FROM moysklad_processing_plan_materials material
             LEFT JOIN moysklad_inventory_products inventory
@@ -66,6 +68,20 @@ export class MoyskladProcessingPlansRepository {
             ORDER BY inventory.name ASC NULLS LAST, material.id ASC
         `, [accountId, planId]);
         const totalCostMinor = items.reduce((sum: number, item: { totalCostMinor?: string }) => sum + Number(item.totalCostMinor ?? 0), 0);
-        return { plan, items, totalCostMinor: String(totalCostMinor) };
+        const totalSalePriceMinor = items.reduce((sum: number, item: { totalSalePriceMinor?: string }) => sum + Number(item.totalSalePriceMinor ?? 0), 0);
+        const settings = await this.plans.query(`
+            SELECT flowwow_order_markup_percent::text AS "markupPercent"
+            FROM auth_accounts
+            WHERE id = $1::uuid
+        `, [accountId]) as Array<{ markupPercent?: string }>;
+        const markupPercent = Number(settings[0]?.markupPercent ?? 40);
+        return {
+            plan,
+            items,
+            totalCostMinor: String(totalCostMinor),
+            totalSalePriceMinor: String(totalSalePriceMinor),
+            markupPercent,
+            recommendedPriceMinor: String(Math.round(totalSalePriceMinor * (1 + markupPercent / 100))),
+        };
     }
 }

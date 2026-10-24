@@ -26,7 +26,7 @@ export class AuthRepository {
 
     public findTokensById(accountId: string): Promise<Account | null> {
         return this.accounts.createQueryBuilder('account')
-            .addSelect(['account.flowwowToken', 'account.moyskladToken'])
+            .addSelect(['account.flowwowToken', 'account.moyskladToken', 'account.flowwowOrderMarkupPercent'])
             .where('account.id = :accountId', { accountId })
             .getOne();
     }
@@ -44,7 +44,7 @@ export class AuthRepository {
 
     public async updateTokens(
         accountId: string,
-        tokens: Partial<Pick<Account, 'flowwowToken' | 'moyskladToken'>>
+        tokens: Partial<Pick<Account, 'flowwowToken' | 'moyskladToken' | 'flowwowOrderMarkupPercent'>>
     ): Promise<boolean> {
         const result = await this.accounts.update({ id: accountId }, tokens);
         return (result.affected ?? 0) > 0;
