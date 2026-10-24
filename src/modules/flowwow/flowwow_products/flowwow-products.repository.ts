@@ -4,6 +4,7 @@ import type { Repository } from 'typeorm';
 
 import { FlowwowProduct } from './models/flowwow-product.model.js';
 import type {
+    FlowwowProductAvailabilityAuditItem,
     FlowwowProductAvailabilityResponse,
     FlowwowProductStatusItem,
     FlowwowProductSnapshot,
@@ -25,6 +26,116 @@ export class FlowwowProductsRepository {
             ['shopId', 'productId']
         );
         return products.length;
+    }
+
+    public async findAllAvailability(accountId: string): Promise<FlowwowProductAvailabilityAuditItem[]> {
+        const products = await this.products.query<Array<{
+            shopId: number | string;
+            productId: number | string;
+            productName: string;
+            isActive: boolean;
+            isArchived: boolean;
+            processingPlanId: string | null;
+            processingPlanName: string | null;
+        }>>(
+            `
+                SELECT
+                    product.shop_id AS "shopId",
+                    product.product_id AS "productId",
+                    product.name AS "productName",
+                    product.is_active AS "isActive",
+                    product.is_archived AS "isArchived",
+                    link.moysklad_product_id AS "processingPlanId",
+                    plan.name AS "processingPlanName"
+                FROM flowwow_products product
+                LEFT JOIN flowwow_product_inventory_links link
+                  ON link.account_id = product.account_id
+                 AND link.shop_id = product.shop_id
+                 AND link.flowwow_product_id = product.product_id
+                LEFT JOIN moysklad_processing_plans plan
+                  ON plan.account_id = link.account_id
+                 AND plan.id = link.moysklad_product_id
+                 AND plan.archived = false
+                WHERE product.account_id = $1::uuid
+                ORDER BY product.shop_id ASC, product.product_id ASC
+            `,
+            [accountId]
+        );
+        const components = await this.products.query<Array<{
+            processingPlanId: string;
+            componentId: string;
+            name: string | null;
+            requiredQuantity: string;
+            availableQuantity: string;
+        }>>(
+            `
+                SELECT
+                    material.processing_plan_id AS "processingPlanId",
+                    material.id AS "componentId",
+                    inventory.name,
+                    material.quantity::text AS "requiredQuantity",
+                    COALESCE(inventory.available, 0)::text AS "availableQuantity"
+                FROM moysklad_processing_plan_materials material
+                LEFT JOIN moysklad_inventory_products inventory
+                  ON inventory.account_id = material.account_id
+                 AND inventory.id = material.assortment_id
+                WHERE material.account_id = $1::uuid
+                  AND COALESCE(inventory.name, '') NOT ILIKE 'Доставка Центральный%'
+                ORDER BY material.processing_plan_id ASC, material.id ASC
+            `,
+            [accountId]
+        );
+        const componentsByPlan = new Map<string, typeof components>();
+        for (const component of components) {
+            const rows = componentsByPlan.get(component.processingPlanId) ?? [];
+            rows.push(component);
+            componentsByPlan.set(component.processingPlanId, rows);
+        }
+
+        return products.map((product) => {
+            const linked = product.processingPlanId !== null;
+            const planComponents = product.processingPlanId === null
+                ? []
+                : componentsByPlan.get(product.processingPlanId) ?? [];
+            const quantities = planComponents.map((component) => ({
+                ...component,
+                required: Number(component.requiredQuantity),
+                available: Number(component.availableQuantity),
+            }));
+            const limiting = quantities.filter((component) => component.required > 0);
+            const availableToAssemble = limiting.length === 0
+                ? 0
+                : Math.max(0, Math.floor(Math.min(
+                    ...limiting.map((component) => component.available / component.required)
+                )));
+            const missingComponents = limiting.flatMap((component) => {
+                if (component.available >= component.required) return [];
+                return [{
+                    componentId: component.componentId,
+                    name: component.name ?? 'Материал не найден в остатках МойСклад',
+                    requiredQuantity: component.required,
+                    availableQuantity: component.available,
+                    missingQuantity: Math.max(component.required - component.available, 0),
+                }];
+            });
+            const hasComponents = limiting.length > 0;
+
+            return {
+                shopId: Number(product.shopId),
+                productId: Number(product.productId),
+                productName: product.productName,
+                isActive: product.isActive,
+                isArchived: product.isArchived,
+                linked,
+                processingPlanId: product.processingPlanId,
+                processingPlanName: product.processingPlanName,
+                hasComponents,
+                hasStock: linked && product.processingPlanName !== null
+                    && hasComponents && missingComponents.length === 0 && availableToAssemble > 0,
+                availableToAssemble,
+                missingComponents,
+            };
+        });
     }
 
     public async findPage(options: FlowwowProductsListOptions): Promise<Omit<FlowwowProductsListResponse, 'shops'>> {

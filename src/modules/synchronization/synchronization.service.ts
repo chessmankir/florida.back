@@ -7,7 +7,7 @@ import { FlowwowOrdersService } from '../flowwow/flowwow_orders/flowwow-orders.s
 import { FlowwowProductsService } from '../flowwow/flowwow_products/flowwow-products.service.js';
 import { MoyskladInventoryService } from '../moysklad_inventory/moysklad-inventory.service.js';
 import { MoyskladProcessingPlansService } from '../moysklad_processing_plans/moysklad-processing-plans.service.js';
-import { SyncResult, SyncScope } from './types/synchronization.types.js';
+import { FlowwowAvailabilityCheckResult, SyncResult, SyncScope } from './types/synchronization.types.js';
 import { AccountAccessService } from '../auth/account-access.service.js';
 
 
@@ -38,6 +38,62 @@ export class SynchronizationService {
 
         try {
             return await this.repository.withLock(accountId, scope, () => this.synchronize(accountId, scope));
+        } finally {
+            this.running = false;
+        }
+    }
+
+    public async checkFlowwowAvailability(accountId: string): Promise<FlowwowAvailabilityCheckResult | null> {
+        if (this.running) return null;
+        this.running = true;
+        const startedAt = new Date();
+
+        try {
+            const [moyskladToken, flowwowToken] = await Promise.all([
+                this.accounts.moyskladToken(accountId),
+                this.accounts.flowwowToken(accountId),
+            ]);
+            const moyskladInventory = await this.moyskladInventory.syncAll(accountId, moyskladToken);
+            const moyskladProcessingPlans = await this.moyskladProcessingPlans.syncAll(accountId, moyskladToken);
+            const flowwowProducts = await this.flowwowProducts.syncAll(accountId, flowwowToken);
+            const products = await this.flowwowProducts.getAvailabilityAudit(accountId);
+            const summary = {
+                total: products.length,
+                withStock: products.filter((product) => product.hasStock).length,
+                withoutStock: products.filter((product) => product.linked && !product.hasStock).length,
+                unlinked: products.filter((product) => !product.linked).length,
+                withoutComponents: products.filter((product) => product.linked && !product.hasComponents).length,
+            };
+
+            for (const product of products) {
+                const status = !product.linked
+                    ? 'Техкарта не привязана'
+                    : !product.hasComponents
+                        ? 'У техкарты нет материалов'
+                        : product.hasStock
+                            ? 'Есть остатки'
+                            : 'Нет остатков';
+                this.logger.log({
+                    event: 'flowwow_product_availability_checked',
+                    status,
+                    shopId: product.shopId,
+                    productId: product.productId,
+                    productName: product.productName,
+                    processingPlanId: product.processingPlanId,
+                    processingPlanName: product.processingPlanName,
+                    availableToAssemble: product.availableToAssemble,
+                    missingComponents: product.missingComponents,
+                });
+            }
+            this.logger.log({ event: 'flowwow_availability_check_finished', ...summary });
+
+            return {
+                startedAt,
+                finishedAt: new Date(),
+                synchronized: { moyskladInventory, moyskladProcessingPlans, flowwowProducts },
+                summary,
+                products,
+            };
         } finally {
             this.running = false;
         }

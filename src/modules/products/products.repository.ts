@@ -359,21 +359,29 @@ export class ProductsRepository {
 
     public async findConsumption(accountId: string, page: number, limit: number, search: string | null, sortDirection: 'asc' | 'desc', endingWithinWeek: boolean, periodDays: number) {
         const offset = (page - 1) * limit;
+        const latestRows = await this.productProfit.query(
+            `SELECT MAX(period_date)::text AS "latestDate" FROM product_profit_daily WHERE account_id = $1::uuid`,
+            [accountId]
+        ) as Array<{ latestDate: string | null }>;
+        const latestDate = latestRows[0]?.latestDate ?? new Date().toISOString().slice(0, 10);
         const rows = await this.productProfit.query(`
             WITH sales AS (
                 SELECT product_id, SUM(sell_quantity - return_quantity) AS sold_quantity
                 FROM product_profit_daily
                 WHERE account_id = $1::uuid
-                  AND period_date >= CURRENT_DATE - (($6::integer - 1) * INTERVAL '1 day')
-                  AND period_date <= CURRENT_DATE
+                  AND product_type = 'product'
+                  AND period_date >= $7::date - (($6::integer - 1) * INTERVAL '1 day')
+                  AND period_date <= $7::date
                 GROUP BY product_id
             ), report AS (
                 SELECT inventory.id, inventory.name, inventory.code, inventory.article, GREATEST(inventory.available, 0) AS available,
-                       GREATEST(COALESCE(sales.sold_quantity, 0), 0) AS sold_quantity,
-                       GREATEST(COALESCE(sales.sold_quantity, 0), 0) / $6::numeric AS average_daily
+                       GREATEST(sales.sold_quantity, 0) AS sold_quantity,
+                       GREATEST(sales.sold_quantity, 0) / $6::numeric AS average_daily
                 FROM moysklad_inventory_products inventory
-                LEFT JOIN sales ON sales.product_id = inventory.id
+                INNER JOIN sales ON sales.product_id = inventory.id
                 WHERE inventory.account_id = $1::uuid AND COALESCE(inventory.archived, false) = false
+                  AND inventory.product_type = 'product'
+                  AND sales.sold_quantity > 0
                   AND ($2::text IS NULL OR inventory.name ILIKE '%' || $2 || '%' OR inventory.code ILIKE '%' || $2 || '%' OR inventory.article ILIKE '%' || $2 || '%')
             ), filtered AS (
                 SELECT *, CASE WHEN average_daily > 0 THEN available / average_daily ELSE NULL END AS days_remaining
@@ -383,13 +391,15 @@ export class ProductsRepository {
             SELECT id::text AS "productId", name, code, article, available::text AS available,
                    sold_quantity::text AS "soldQuantity", ROUND(average_daily, 2)::text AS "averageDaily",
                    CASE WHEN days_remaining IS NOT NULL THEN ROUND(days_remaining, 1)::text ELSE NULL END AS "daysRemaining",
-                   CASE WHEN days_remaining IS NOT NULL THEN (CURRENT_DATE + CEIL(days_remaining)::integer)::text ELSE NULL END AS "expectedOutOfStockDate",
+                   CASE WHEN days_remaining IS NOT NULL THEN ($7::date + CEIL(days_remaining)::integer)::text ELSE NULL END AS "expectedOutOfStockDate",
                    COUNT(*) OVER()::integer AS "totalItems"
             FROM filtered ORDER BY days_remaining ${sortDirection === 'asc' ? 'ASC' : 'DESC'} NULLS LAST, name ASC
             LIMIT $3 OFFSET $4
-        `, [accountId, search, limit, offset, endingWithinWeek, periodDays]) as Array<Record<string, unknown>>;
+        `, [accountId, search, limit, offset, endingWithinWeek, periodDays, latestDate]) as Array<Record<string, unknown>>;
         const totalItems = Number(rows[0]?.totalItems ?? 0);
-        return { period: { dateFrom: new Date(Date.now() - (periodDays - 1) * 86400000).toISOString().slice(0, 10), dateTo: new Date().toISOString().slice(0, 10), days: periodDays }, items: rows.map(({ totalItems: _, ...row }) => row), pagination: { page, limit, totalItems, totalPages: totalItems === 0 ? 0 : Math.ceil(totalItems / limit) } };
+        const dateFrom = new Date(`${latestDate}T00:00:00.000Z`);
+        dateFrom.setUTCDate(dateFrom.getUTCDate() - (periodDays - 1));
+        return { period: { dateFrom: dateFrom.toISOString().slice(0, 10), dateTo: latestDate, days: periodDays }, items: rows.map(({ totalItems: _, ...row }) => row), pagination: { page, limit, totalItems, totalPages: totalItems === 0 ? 0 : Math.ceil(totalItems / limit) } };
     }
 }
 

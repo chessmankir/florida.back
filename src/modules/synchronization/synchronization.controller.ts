@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, Controller, Headers, HttpCode, 
 
 import { SynchronizationService } from './synchronization.service.js';
 import type { SyncResult, SyncScope } from './types/synchronization.types.js';
+import type { FlowwowAvailabilityCheckResult } from './types/synchronization.types.js';
 import { AccountAccessService } from '../auth/account-access.service.js';
 
 @Controller('synchronization')
@@ -26,6 +27,18 @@ export class SynchronizationController {
             throw new ConflictException('Синхронизация уже выполняется');
         }
 
+        return result;
+    }
+
+    @Post('flowwow-availability')
+    @HttpCode(HttpStatus.OK)
+    public async checkFlowwowAvailability(
+        @Headers('x-account-id') accountIdValue: string | undefined,
+        @Headers('authorization') authorization: string | undefined
+    ): Promise<FlowwowAvailabilityCheckResult> {
+        const accountId = this.accounts.authorize(accountIdValue, authorization);
+        const result = await this.synchronization.checkFlowwowAvailability(accountId);
+        if (!result) throw new ConflictException('Синхронизация уже выполняется');
         return result;
     }
 }

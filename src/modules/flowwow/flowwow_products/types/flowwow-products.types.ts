@@ -157,3 +157,26 @@ export interface FlowwowProductAvailabilityResponse {
         missingQuantity: number;
     }>;
 }
+
+export interface FlowwowProductAvailabilityAuditComponent {
+    componentId: string;
+    name: string;
+    requiredQuantity: number;
+    availableQuantity: number;
+    missingQuantity: number;
+}
+
+export interface FlowwowProductAvailabilityAuditItem {
+    shopId: number;
+    productId: number;
+    productName: string;
+    isActive: boolean;
+    isArchived: boolean;
+    linked: boolean;
+    processingPlanId: string | null;
+    processingPlanName: string | null;
+    hasComponents: boolean;
+    hasStock: boolean;
+    availableToAssemble: number;
+    missingComponents: FlowwowProductAvailabilityAuditComponent[];
+}

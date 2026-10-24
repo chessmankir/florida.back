@@ -45,4 +45,58 @@ describe('SynchronizationService', () => {
         });
         expect(result?.errors).toEqual([]);
     });
+
+    it('synchronizes sources and checks every Flowwow product availability', async () => {
+        const inventoryResult = {
+            assortmentReceived: 10,
+            stockRowsReceived: 8,
+            bundlesReceived: 0,
+            componentsReceived: 0,
+            saved: 10,
+        };
+        const plansResult = { plans: 2, materials: 4 };
+        const flowwowResult = { shops: { 1: 3 }, total: 3 };
+        const inventory = { syncAll: vi.fn().mockResolvedValue(inventoryResult) };
+        const plans = { syncAll: vi.fn().mockResolvedValue(plansResult) };
+        const flowwow = {
+            syncAll: vi.fn().mockResolvedValue(flowwowResult),
+            getAvailabilityAudit: vi.fn().mockResolvedValue([
+                { shopId: 1, productId: 1, productName: 'Есть', linked: true, hasComponents: true, hasStock: true,
+                    processingPlanId: 'plan-1', processingPlanName: 'Карта 1', availableToAssemble: 2, missingComponents: [] },
+                { shopId: 1, productId: 2, productName: 'Нет', linked: true, hasComponents: true, hasStock: false,
+                    processingPlanId: 'plan-2', processingPlanName: 'Карта 2', availableToAssemble: 0, missingComponents: [{}] },
+                { shopId: 1, productId: 3, productName: 'Без карты', linked: false, hasComponents: false, hasStock: false,
+                    processingPlanId: null, processingPlanName: null, availableToAssemble: 0, missingComponents: [] },
+            ]),
+        };
+        const accounts = {
+            moyskladToken: vi.fn().mockResolvedValue('moysklad-token'),
+            flowwowToken: vi.fn().mockResolvedValue('flowwow-token'),
+        };
+        const service = new SynchronizationService(
+            {} as never,
+            {} as never,
+            {} as never,
+            {} as never,
+            {} as never,
+            flowwow as never,
+            inventory as never,
+            plans as never,
+            accounts as never,
+        );
+
+        const result = await service.checkFlowwowAvailability('account-id');
+
+        expect(inventory.syncAll).toHaveBeenCalledWith('account-id', 'moysklad-token');
+        expect(plans.syncAll).toHaveBeenCalledWith('account-id', 'moysklad-token');
+        expect(flowwow.syncAll).toHaveBeenCalledWith('account-id', 'flowwow-token');
+        expect(flowwow.getAvailabilityAudit).toHaveBeenCalledWith('account-id');
+        expect(result?.summary).toEqual({
+            total: 3,
+            withStock: 1,
+            withoutStock: 1,
+            unlinked: 1,
+            withoutComponents: 0,
+        });
+    });
 });

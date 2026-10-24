@@ -14,6 +14,7 @@ import type {
     FlowwowProductStatusResponse,
     FlowwowProductsListResponse,
     FlowwowProductAvailabilityResponse,
+    FlowwowProductAvailabilityAuditItem,
     FlowwowProductsSyncResult,
 } from './types/flowwow-products.types.js';
 
@@ -135,6 +136,10 @@ export class FlowwowProductsService {
         const result = await this.repository.findAvailability(accountId, shopId, productId);
         if (result === null) throw new NotFoundException('Товар Flowwow не найден');
         return result;
+    }
+
+    public getAvailabilityAudit(accountId: string): Promise<FlowwowProductAvailabilityAuditItem[]> {
+        return this.repository.findAllAvailability(accountId);
     }
 
     public changeVisibility(
